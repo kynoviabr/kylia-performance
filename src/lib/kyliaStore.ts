@@ -1,6 +1,7 @@
 import { demoData } from "../data";
 import type {
   CreateObjectiveInput,
+  CreateKeyResultInput,
   CreateTeamInput,
   Cycle,
   Invite,
@@ -231,6 +232,40 @@ export async function createObjective(input: CreateObjectiveInput) {
   return { data: mapObjective(data), error: null };
 }
 
+export async function createKeyResult(input: CreateKeyResultInput) {
+  if (!isSupabaseConfigured || !supabase) {
+    return { data: null, error: new Error("Supabase is not configured.") };
+  }
+
+  const progress = calculateStoredProgress(input.krType, input.startValue, input.targetValue, input.currentValue);
+
+  const { data, error } = await supabase
+    .from("key_results")
+    .insert({
+      objective_id: input.objectiveId,
+      title: input.title,
+      description: input.description,
+      owner_id: input.ownerId,
+      kr_type: input.krType,
+      start_value: input.startValue,
+      target_value: input.targetValue,
+      current_value: input.currentValue,
+      unit: input.unit,
+      progress,
+      status: statusFromStoredProgress(progress),
+      confidence: input.confidence,
+      sort_order: input.sortOrder,
+    })
+    .select("*")
+    .single<KeyResultRow>();
+
+  if (error || !data) {
+    return { data: null, error: error ?? new Error("Could not create key result.") };
+  }
+
+  return { data: mapKeyResult(data), error: null };
+}
+
 export async function createWorkspace(input: OnboardingInput) {
   if (!isSupabaseConfigured || !supabase) {
     return { error: new Error("Supabase is not configured.") };
@@ -383,4 +418,19 @@ function mapWeeklyProgress(rows: any[]): WeeklyProgress[] {
     sales: Number(row.sales_progress ?? row.sales ?? 0),
     success: Number(row.success_progress ?? row.success ?? 0),
   }));
+}
+
+function calculateStoredProgress(type: KeyResult["krType"], startValue: number, targetValue: number, currentValue: number) {
+  if (type === "boolean") return currentValue > 0 ? 100 : 0;
+  const denominator = targetValue - startValue;
+  if (denominator === 0) return 0;
+  const raw = ((currentValue - startValue) / denominator) * 100;
+  return Math.max(0, Math.min(100, Math.round(raw)));
+}
+
+function statusFromStoredProgress(progress: number): KeyResult["status"] {
+  if (progress >= 100) return "completed";
+  if (progress >= 70) return "on_track";
+  if (progress >= 40) return "at_risk";
+  return "behind";
 }

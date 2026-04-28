@@ -486,6 +486,14 @@ CREATE POLICY "Usuário vê KRs da sua organização"
     )
   );
 
+CREATE POLICY "Membros podem criar KRs da sua organização"
+  ON key_results FOR INSERT
+  WITH CHECK (
+    objective_id IN (
+      SELECT id FROM objectives WHERE organization_id = current_user_org_id()
+    )
+  );
+
 CREATE POLICY "Membros podem atualizar KRs dos quais são donos"
   ON key_results FOR UPDATE
   USING (

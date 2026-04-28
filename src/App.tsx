@@ -25,9 +25,9 @@ import {
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { demoData } from "./data";
-import { createInvite, createObjective, createTeam, createWorkspace, loadKyliaData, persistKrUpdate } from "./lib/kyliaStore";
+import { createInvite, createKeyResult, createObjective, createTeam, createWorkspace, loadKyliaData, persistKrUpdate } from "./lib/kyliaStore";
 import { isSupabaseConfigured, signInWithEmail, signInWithGoogle, signOut, signUpWithEmail, supabase } from "./lib/supabase";
-import type { Invite, KeyResult, KrUpdate, Objective, KyliaData, OnboardingInput, Organization, Profile, Role, Status, Team, WeeklyProgress } from "./types";
+import type { Invite, KeyResult, KrType, KrUpdate, Objective, KyliaData, OnboardingInput, Organization, Profile, Role, Status, Team, WeeklyProgress } from "./types";
 
 type View = "auth" | "dashboard" | "objectives" | "detail" | "teams";
 type Language = "pt" | "en";
@@ -270,6 +270,48 @@ export function App() {
     return "";
   }
 
+  async function handleCreateKeyResult(input: {
+    objectiveId: string;
+    title: string;
+    description: string;
+    ownerId: string;
+    krType: KrType;
+    startValue: number;
+    targetValue: number;
+    currentValue: number;
+    unit: string;
+    confidence: number;
+  }) {
+    const objectiveKrs = keyResults.filter((kr) => kr.objectiveId === input.objectiveId);
+    const result = await createKeyResult({
+      ...input,
+      sortOrder: objectiveKrs.length + 1,
+    });
+
+    if (result.error || !result.data) {
+      return result.error?.message ?? "Could not create key result.";
+    }
+
+    const nextKrs = [...objectiveKrs, result.data];
+    const objectiveProgress = average(nextKrs.map((kr) => kr.progress));
+
+    setData((current) => ({
+      ...current,
+      keyResults: [...current.keyResults, result.data],
+      objectives: current.objectives.map((objective) =>
+        objective.id === input.objectiveId
+          ? {
+              ...objective,
+              progress: objectiveProgress,
+              status: statusFromProgress(objectiveProgress),
+            }
+          : objective,
+      ),
+    }));
+
+    return "";
+  }
+
   const filteredObjectives = useMemo(() => {
     return objectives.filter((objective) => {
       const matchesCycle = objective.cycleId === filters.cycleId;
@@ -451,6 +493,7 @@ export function App() {
             profiles={profiles}
             onBack={() => setView("objectives")}
             onUpdateKr={setUpdateTarget}
+            onCreateKeyResult={handleCreateKeyResult}
           />
         )}
         {dataMode !== "needs_onboarding" && dataMode !== "signed_out" && view === "teams" && (
@@ -943,6 +986,7 @@ function ObjectiveDetail({
   profiles,
   onBack,
   onUpdateKr,
+  onCreateKeyResult,
 }: {
   objective: Objective;
   keyResults: KeyResult[];
@@ -951,8 +995,94 @@ function ObjectiveDetail({
   profiles: Profile[];
   onBack: () => void;
   onUpdateKr: (kr: KeyResult) => void;
+  onCreateKeyResult: (input: {
+    objectiveId: string;
+    title: string;
+    description: string;
+    ownerId: string;
+    krType: KrType;
+    startValue: number;
+    targetValue: number;
+    currentValue: number;
+    unit: string;
+    confidence: number;
+  }) => Promise<string>;
 }) {
   const recentUpdates = updates.filter((update) => keyResults.some((kr) => kr.id === update.keyResultId));
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [ownerId, setOwnerId] = useState(objective.ownerId || profiles[0]?.id || "");
+  const [krType, setKrType] = useState<KrType>("percentage");
+  const [startValue, setStartValue] = useState(0);
+  const [currentValue, setCurrentValue] = useState(0);
+  const [targetValue, setTargetValue] = useState(100);
+  const [unit, setUnit] = useState("%");
+  const [confidence, setConfidence] = useState(7);
+  const [message, setMessage] = useState("");
+
+  function handleTypeChange(nextType: KrType) {
+    setKrType(nextType);
+    if (nextType === "percentage") {
+      setUnit("%");
+      setStartValue(0);
+      setCurrentValue(0);
+      setTargetValue(100);
+      return;
+    }
+    if (nextType === "currency") {
+      setUnit("R$");
+      setStartValue(0);
+      setCurrentValue(0);
+      setTargetValue(10000);
+      return;
+    }
+    if (nextType === "boolean") {
+      setUnit("");
+      setStartValue(0);
+      setCurrentValue(0);
+      setTargetValue(1);
+      return;
+    }
+    setUnit("");
+    setStartValue(0);
+    setCurrentValue(0);
+    setTargetValue(100);
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setMessage("");
+
+    if (!title.trim() || !ownerId) return;
+    if (krType !== "boolean" && targetValue === startValue) {
+      setMessage("A meta precisa ser diferente do valor inicial.");
+      return;
+    }
+
+    const result = await onCreateKeyResult({
+      objectiveId: objective.id,
+      title: title.trim(),
+      description: description.trim(),
+      ownerId,
+      krType,
+      startValue,
+      currentValue: krType === "boolean" ? (currentValue > 0 ? 1 : 0) : currentValue,
+      targetValue,
+      unit,
+      confidence,
+    });
+
+    if (result) {
+      setMessage(result);
+      return;
+    }
+
+    setTitle("");
+    setDescription("");
+    setConfidence(7);
+    handleTypeChange(krType);
+    setMessage("Key Result criado.");
+  }
 
   return (
     <div className="page-stack">
@@ -968,7 +1098,53 @@ function ObjectiveDetail({
         <Progress value={objective.progress} status={objective.status} large />
       </section>
 
+      <section className="panel wide">
+        <PanelHeader icon={Plus} title="Novo Key Result" action={<Badge tone="success">key_results</Badge>} />
+        <form className="kr-form" onSubmit={handleSubmit}>
+          <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Ex: Aumentar receita recorrente para R$ 100 mil" required />
+          <textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Descrição ou critério de sucesso" rows={3} />
+          <select value={ownerId} onChange={(event) => setOwnerId(event.target.value)} required>
+            {profiles.map((profile) => (
+              <option key={profile.id} value={profile.id}>
+                {profile.fullName} · {roleLabels[profile.role]}
+              </option>
+            ))}
+          </select>
+          <select value={krType} onChange={(event) => handleTypeChange(event.target.value as KrType)}>
+            <option value="percentage">Percentual</option>
+            <option value="numeric">Número</option>
+            <option value="currency">Moeda</option>
+            <option value="boolean">Sim/não</option>
+          </select>
+          {krType !== "boolean" && (
+            <>
+              <input value={unit} onChange={(event) => setUnit(event.target.value)} placeholder="Unidade: %, R$, clientes, NPS" />
+              <input value={startValue} onChange={(event) => setStartValue(Number(event.target.value))} type="number" placeholder="Valor inicial" />
+              <input value={currentValue} onChange={(event) => setCurrentValue(Number(event.target.value))} type="number" placeholder="Valor atual" />
+              <input value={targetValue} onChange={(event) => setTargetValue(Number(event.target.value))} type="number" placeholder="Meta" required />
+            </>
+          )}
+          {krType === "boolean" && (
+            <select value={currentValue > 0 ? "1" : "0"} onChange={(event) => setCurrentValue(Number(event.target.value))}>
+              <option value="0">Ainda não concluído</option>
+              <option value="1">Concluído</option>
+            </select>
+          )}
+          <label className="range-field">
+            <span>Confiança inicial: {confidence}/10</span>
+            <input value={confidence} min="1" max="10" onChange={(event) => setConfidence(Number(event.target.value))} type="range" />
+          </label>
+          {message && <p className="auth-message">{message}</p>}
+          <button className="primary-button" type="submit">
+            <Plus size={16} /> Criar Key Result
+          </button>
+        </form>
+      </section>
+
       <section className="kr-grid">
+        {keyResults.length === 0 && (
+          <div className="empty-state">Nenhum Key Result criado ainda para este objetivo.</div>
+        )}
         {keyResults.map((kr) => (
           <article className="kr-card" key={kr.id}>
             <div className="kr-topline">

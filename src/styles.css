@@ -485,6 +485,9 @@ button {
 .invite-form input,
 .invite-form textarea,
 .invite-form select,
+.kr-form input,
+.kr-form textarea,
+.kr-form select,
 .auth-panel input,
 .modal input,
 .modal textarea {
@@ -514,6 +517,9 @@ button {
 .invite-form input,
 .invite-form textarea,
 .invite-form select,
+.kr-form input,
+.kr-form textarea,
+.kr-form select,
 .auth-panel input,
 .modal input,
 .modal textarea {
@@ -523,7 +529,8 @@ button {
 
 .modal textarea,
 .auth-panel textarea,
-.invite-form textarea {
+.invite-form textarea,
+.kr-form textarea {
   padding-top: 10px;
 }
 
@@ -790,6 +797,29 @@ button {
   gap: 10px;
 }
 
+.kr-form {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.kr-form textarea,
+.kr-form .auth-message,
+.kr-form .primary-button {
+  grid-column: 1 / -1;
+}
+
+.range-field {
+  display: grid;
+  gap: 8px;
+  color: var(--text-md);
+}
+
+.range-field input {
+  min-height: 24px;
+  padding: 0;
+}
+
 .objective-form {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1040,6 +1070,7 @@ button {
 
   .metric-row,
   .toolbar,
+  .kr-form,
   .objective-form,
   .objective-main,
   .detail-header,

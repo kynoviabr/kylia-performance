@@ -124,6 +124,20 @@ export type KrUpdateInput = {
   blockerDescription: string;
 };
 
+export type CreateKeyResultInput = {
+  objectiveId: string;
+  title: string;
+  description: string;
+  ownerId: string;
+  krType: KrType;
+  startValue: number;
+  targetValue: number;
+  currentValue: number;
+  unit: string;
+  confidence: number;
+  sortOrder: number;
+};
+
 export type InviteInput = {
   organizationId: string;
   invitedBy: string;
