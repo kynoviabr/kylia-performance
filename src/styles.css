@@ -550,6 +550,37 @@ button {
   text-align: left;
 }
 
+.cascade-heading {
+  border-top: 1px solid var(--border);
+  padding-top: 18px;
+}
+
+.cascade-heading:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.cascade-heading p,
+.cascade-parent,
+.empty-state {
+  color: var(--text-md);
+}
+
+.cascade-heading p {
+  margin: 6px 0 0;
+}
+
+.cascade-parent {
+  display: block;
+  margin-top: 10px;
+}
+
+.empty-state {
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  padding: 18px;
+}
+
 .objective-card:hover,
 .team-row:hover,
 .alert-item:hover {

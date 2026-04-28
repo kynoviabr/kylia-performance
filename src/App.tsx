@@ -433,6 +433,7 @@ export function App() {
             filters={filters}
             setFilters={setFilters}
             objectives={filteredObjectives}
+            allObjectives={objectives}
             keyResults={keyResults}
             cycles={cycles}
             teams={teams}
@@ -693,6 +694,7 @@ function ObjectivesView({
   filters,
   setFilters,
   objectives,
+  allObjectives,
   keyResults,
   cycles,
   teams,
@@ -703,6 +705,7 @@ function ObjectivesView({
   filters: Filters;
   setFilters: (filters: Filters) => void;
   objectives: Objective[];
+  allObjectives: Objective[];
   keyResults: KeyResult[];
   cycles: KyliaData["cycles"];
   teams: Team[];
@@ -718,6 +721,9 @@ function ObjectivesView({
   }) => Promise<string>;
   onOpenObjective: (objectiveId: string) => void;
 }) {
+  const corporateObjectives = allObjectives.filter((objective) => objective.isCompanyOkr);
+  const visibleCorporateObjectives = objectives.filter((objective) => objective.isCompanyOkr);
+  const departmentalObjectives = objectives.filter((objective) => !objective.isCompanyOkr);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [scope, setScope] = useState<"company" | "team">("company");
@@ -737,10 +743,15 @@ function ObjectivesView({
     event.preventDefault();
     setMessage("");
 
+    if (scope === "team" && !parentId) {
+      setMessage("Escolha um objetivo corporativo pai antes de criar um objetivo departamental.");
+      return;
+    }
+
     const result = await onCreateObjective({
       cycleId,
       teamId: scope === "team" ? teamId : undefined,
-      parentId: parentId || undefined,
+      parentId: scope === "team" ? parentId : undefined,
       title: title.trim(),
       description: description.trim(),
       ownerId,
@@ -754,7 +765,7 @@ function ObjectivesView({
 
     setTitle("");
     setDescription("");
-    setParentId("");
+    setParentId(scope === "team" ? parentId : "");
     setMessage("Objetivo criado.");
   }
 
@@ -776,8 +787,8 @@ function ObjectivesView({
             ))}
           </select>
           <select value={scope} onChange={(event) => setScope(event.target.value as "company" | "team")}>
-            <option value="company">Empresa inteira</option>
-            <option value="team">Time/departamento</option>
+            <option value="company">1. Corporativo</option>
+            <option value="team" disabled={corporateObjectives.length === 0}>2. Departamental</option>
           </select>
           {scope === "team" && (
             <select value={teamId} onChange={(event) => setTeamId(event.target.value)} required>
@@ -786,12 +797,28 @@ function ObjectivesView({
               ))}
             </select>
           )}
-          <select value={parentId} onChange={(event) => setParentId(event.target.value)}>
-            <option value="">Sem objetivo pai</option>
-            {objectives.map((objective) => (
-              <option key={objective.id} value={objective.id}>{objective.title}</option>
-            ))}
-          </select>
+          {scope === "team" && (
+            <select value={parentId} onChange={(event) => setParentId(event.target.value)} required>
+              <option value="">Objetivo corporativo pai</option>
+              {corporateObjectives.map((objective) => (
+                <option key={objective.id} value={objective.id}>{objective.title}</option>
+              ))}
+            </select>
+          )}
+          {scope === "company" && (
+            <select value="" disabled>
+              <option>Criar primeiro no topo da cascata</option>
+            </select>
+          )}
+          {scope === "team" && corporateObjectives.length === 0 && (
+            <p className="auth-message">Crie pelo menos um objetivo corporativo antes dos departamentais.</p>
+          )}
+          {scope === "company" && corporateObjectives.length > 0 && (
+            <p className="auth-message">Objetivos corporativos ficam no topo. Depois crie objetivos departamentais alinhados a eles.</p>
+          )}
+          {scope === "team" && parentId && (
+            <p className="auth-message">Este objetivo será criado abaixo do corporativo selecionado.</p>
+          )}
           {message && <p className="auth-message">{message}</p>}
           <button className="primary-button" type="submit">
             <Plus size={16} /> Criar objetivo
@@ -828,30 +855,83 @@ function ObjectivesView({
       </section>
 
       <section className="objective-list">
-        {objectives.map((objective) => {
-          const objectiveKrs = keyResults.filter((kr) => kr.objectiveId === objective.id);
-          return (
-            <button className="objective-card" key={objective.id} type="button" onClick={() => onOpenObjective(objective.id)}>
-              <div className="objective-main">
-                <div>
-                  <Badge tone={objective.isCompanyOkr ? "success" : "neutral"}>
-                    {objective.isCompanyOkr ? "Empresa" : teamName(teams, objective.teamId)}
-                  </Badge>
-                  <h2>{objective.title}</h2>
-                  <p>{objective.description}</p>
-                </div>
-                <Progress value={objective.progress} status={objective.status} large />
-              </div>
-              <div className="objective-meta">
-                <span><Users size={16} /> {ownerName(profiles, objective.ownerId)}</span>
-                <span><KeyRound size={16} /> {objectiveKrs.length} KRs</span>
-                <span><Clock3 size={16} /> {statusMeta[objective.status].label}</span>
-              </div>
-            </button>
-          );
-        })}
+        <div className="cascade-heading">
+          <span className="eyebrow">1. Corporativos</span>
+          <p>Defina primeiro o foco da empresa. Eles serão a base para os objetivos departamentais.</p>
+        </div>
+        {visibleCorporateObjectives.length === 0 && (
+          <div className="empty-state">Nenhum objetivo corporativo criado ainda.</div>
+        )}
+        {visibleCorporateObjectives.map((objective) => (
+          <ObjectiveCard
+            key={objective.id}
+            objective={objective}
+            keyResults={keyResults}
+            teams={teams}
+            profiles={profiles}
+            onOpenObjective={onOpenObjective}
+          />
+        ))}
+
+        <div className="cascade-heading">
+          <span className="eyebrow">2. Departamentais</span>
+          <p>Crie objetivos de times/departamentos alinhados a um objetivo corporativo.</p>
+        </div>
+        {departmentalObjectives.length === 0 && (
+          <div className="empty-state">Nenhum objetivo departamental criado ainda.</div>
+        )}
+        {departmentalObjectives.map((objective) => (
+          <ObjectiveCard
+            key={objective.id}
+            objective={objective}
+            keyResults={keyResults}
+            teams={teams}
+            profiles={profiles}
+            parentTitle={allObjectives.find((candidate) => candidate.id === objective.parentId)?.title}
+            onOpenObjective={onOpenObjective}
+          />
+        ))}
       </section>
     </div>
+  );
+}
+
+function ObjectiveCard({
+  objective,
+  keyResults,
+  teams,
+  profiles,
+  parentTitle,
+  onOpenObjective,
+}: {
+  objective: Objective;
+  keyResults: KeyResult[];
+  teams: Team[];
+  profiles: Profile[];
+  parentTitle?: string;
+  onOpenObjective: (objectiveId: string) => void;
+}) {
+  const objectiveKrs = keyResults.filter((kr) => kr.objectiveId === objective.id);
+
+  return (
+    <button className="objective-card" type="button" onClick={() => onOpenObjective(objective.id)}>
+      <div className="objective-main">
+        <div>
+          <Badge tone={objective.isCompanyOkr ? "success" : "neutral"}>
+            {objective.isCompanyOkr ? "Corporativo" : teamName(teams, objective.teamId)}
+          </Badge>
+          <h2>{objective.title}</h2>
+          <p>{objective.description}</p>
+          {parentTitle && <small className="cascade-parent">Alinhado a: {parentTitle}</small>}
+        </div>
+        <Progress value={objective.progress} status={objective.status} large />
+      </div>
+      <div className="objective-meta">
+        <span><Users size={16} /> {ownerName(profiles, objective.ownerId)}</span>
+        <span><KeyRound size={16} /> {objectiveKrs.length} KRs</span>
+        <span><Clock3 size={16} /> {statusMeta[objective.status].label}</span>
+      </div>
+    </button>
   );
 }
 
