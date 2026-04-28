@@ -785,6 +785,11 @@ button {
   min-height: 36px;
 }
 
+.secondary-button.compact {
+  min-height: 38px;
+  padding: 0 12px;
+}
+
 .auth-layout {
   display: grid;
   min-height: calc(100vh - 140px);
@@ -830,6 +835,15 @@ button {
   display: grid;
   gap: 8px;
   color: var(--text-md);
+}
+
+.auth-message {
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #121216;
+  color: var(--text-md);
+  padding: 10px 12px;
 }
 
 .auth-tabs {

@@ -26,7 +26,7 @@ import {
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { demoData } from "./data";
 import { createInvite, loadKyliaData, persistKrUpdate } from "./lib/kyliaStore";
-import { isSupabaseConfigured } from "./lib/supabase";
+import { isSupabaseConfigured, signInWithEmail, signInWithGoogle, signOut, signUpWithEmail } from "./lib/supabase";
 import type { Invite, KeyResult, KrUpdate, Objective, KyliaData, Organization, Profile, Role, Status, Team, WeeklyProgress } from "./types";
 
 type View = "auth" | "dashboard" | "objectives" | "detail" | "teams";
@@ -113,6 +113,7 @@ export function App() {
   const [data, setData] = useState<KyliaData>(demoData);
   const [dataMode, setDataMode] = useState<"demo" | "supabase">("demo");
   const [isLoading, setIsLoading] = useState(true);
+  const [authMessage, setAuthMessage] = useState("");
   const [filters, setFilters] = useState<Filters>({
     cycleId: "q2_2026",
     teamId: "all",
@@ -129,25 +130,51 @@ export function App() {
   const currentUser = profiles[0];
 
   useEffect(() => {
-    let isMounted = true;
-
-    loadKyliaData().then((loadedData) => {
-      if (!isMounted) return;
-      const { mode, ...nextData } = loadedData;
-      setData(nextData);
-      setDataMode(mode);
-      setFilters((current) => ({
-        ...current,
-        cycleId: nextData.cycles.find((cycle) => cycle.isActive)?.id ?? nextData.cycles[0]?.id ?? current.cycleId,
-      }));
-      setSelectedObjectiveId(nextData.objectives[0]?.id ?? selectedObjectiveId);
-      setIsLoading(false);
-    });
-
-    return () => {
-      isMounted = false;
-    };
+    refreshData();
   }, []);
+
+  async function refreshData() {
+    setIsLoading(true);
+    const loadedData = await loadKyliaData();
+    const { mode, ...nextData } = loadedData;
+    setData(nextData);
+    setDataMode(mode);
+    setFilters((current) => ({
+      ...current,
+      cycleId: nextData.cycles.find((cycle) => cycle.isActive)?.id ?? nextData.cycles[0]?.id ?? current.cycleId,
+    }));
+    setSelectedObjectiveId(nextData.objectives[0]?.id ?? selectedObjectiveId);
+    setIsLoading(false);
+  }
+
+  async function handleEmailAuth(input: { mode: "login" | "signup"; email: string; password: string; fullName: string }) {
+    setAuthMessage("");
+    const result = input.mode === "login"
+      ? await signInWithEmail(input.email, input.password)
+      : await signUpWithEmail(input.email, input.password, input.fullName);
+
+    if (result.error) {
+      setAuthMessage(result.error.message);
+      return;
+    }
+
+    setAuthMessage(input.mode === "login" ? "Sessão iniciada." : "Cadastro criado. Verifique o e-mail se a confirmação estiver ativa.");
+    await refreshData();
+    setView("dashboard");
+  }
+
+  async function handleGoogleAuth() {
+    const result = await signInWithGoogle();
+    if (result.error) {
+      setAuthMessage(result.error.message);
+    }
+  }
+
+  async function handleSignOut() {
+    await signOut();
+    await refreshData();
+    setView("auth");
+  }
 
   const filteredObjectives = useMemo(() => {
     return objectives.filter((objective) => {
@@ -284,8 +311,15 @@ export function App() {
           onLanguageChange={setLanguage}
           isLoading={isLoading}
           dataMode={dataMode}
+          onSignOut={handleSignOut}
         />
-        {view === "auth" && <AuthExperience />}
+        {view === "auth" && (
+          <AuthExperience
+            message={authMessage}
+            onEmailAuth={handleEmailAuth}
+            onGoogleAuth={handleGoogleAuth}
+          />
+        )}
         {view === "dashboard" && (
           <Dashboard
             objectives={objectives}
@@ -398,6 +432,7 @@ function Topbar({
   onLanguageChange,
   isLoading,
   dataMode,
+  onSignOut,
 }: {
   currentUserName: string;
   activeCycleName: string;
@@ -406,6 +441,7 @@ function Topbar({
   onLanguageChange: (language: Language) => void;
   isLoading: boolean;
   dataMode: "demo" | "supabase";
+  onSignOut: () => void;
 }) {
   return (
     <header className="topbar">
@@ -430,6 +466,11 @@ function Topbar({
         <button className="icon-button" type="button" aria-label="Notificações">
           <Bell size={18} />
         </button>
+        {dataMode === "supabase" && (
+          <button className="secondary-button compact" type="button" onClick={onSignOut}>
+            Sair
+          </button>
+        )}
         <div className="avatar" title={currentUserName}>
           {initials(currentUserName)}
         </div>
@@ -775,7 +816,25 @@ function TeamsView({
   );
 }
 
-function AuthExperience() {
+function AuthExperience({
+  message,
+  onEmailAuth,
+  onGoogleAuth,
+}: {
+  message: string;
+  onEmailAuth: (input: { mode: "login" | "signup"; email: string; password: string; fullName: string }) => void;
+  onGoogleAuth: () => void;
+}) {
+  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    onEmailAuth({ mode, email, password, fullName });
+  }
+
   return (
     <div className="auth-layout">
       <section className="auth-copy">
@@ -787,26 +846,33 @@ function AuthExperience() {
           <span><CheckCircle2 size={18} /> Entrar no dashboard</span>
         </div>
       </section>
-      <section className="auth-panel">
+      <form className="auth-panel" onSubmit={handleSubmit}>
         <div className="auth-tabs">
-          <button className="is-active" type="button">Login</button>
-          <button type="button">Cadastro</button>
+          <button className={mode === "login" ? "is-active" : ""} type="button" onClick={() => setMode("login")}>Login</button>
+          <button className={mode === "signup" ? "is-active" : ""} type="button" onClick={() => setMode("signup")}>Cadastro</button>
         </div>
+        {mode === "signup" && (
+          <label>
+            Nome
+            <input value={fullName} onChange={(event) => setFullName(event.target.value)} placeholder="Seu nome" type="text" />
+          </label>
+        )}
         <label>
           E-mail
-          <input placeholder="voce@empresa.com" type="email" />
+          <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="voce@empresa.com" type="email" required />
         </label>
         <label>
           Senha
-          <input placeholder="••••••••" type="password" />
+          <input value={password} onChange={(event) => setPassword(event.target.value)} placeholder="••••••••" type="password" minLength={6} required />
         </label>
-        <button className="primary-button" type="button">
-          <LogIn size={18} /> Entrar
+        {message && <p className="auth-message">{message}</p>}
+        <button className="primary-button" type="submit">
+          <LogIn size={18} /> {mode === "login" ? "Entrar" : "Criar conta"}
         </button>
-        <button className="secondary-button" type="button">
+        <button className="secondary-button" type="button" onClick={onGoogleAuth}>
           <Sparkles size={18} /> Continuar com Google
         </button>
-      </section>
+      </form>
     </div>
   );
 }
