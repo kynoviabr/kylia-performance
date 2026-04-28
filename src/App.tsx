@@ -31,6 +31,7 @@ import type { Invite, KeyResult, KrUpdate, Objective, KyliaData, OnboardingInput
 
 type View = "auth" | "dashboard" | "objectives" | "detail" | "teams";
 type Language = "pt" | "en";
+type DataMode = "demo" | "signed_out" | "supabase" | "needs_onboarding";
 type Filters = {
   cycleId: string;
   teamId: string;
@@ -114,7 +115,7 @@ export function App() {
   const [view, setView] = useState<View>("dashboard");
   const [language, setLanguage] = useState<Language>("pt");
   const [data, setData] = useState<KyliaData>(demoData);
-  const [dataMode, setDataMode] = useState<"demo" | "supabase" | "needs_onboarding">("demo");
+  const [dataMode, setDataMode] = useState<DataMode>("demo");
   const [isLoading, setIsLoading] = useState(true);
   const [authMessage, setAuthMessage] = useState("");
   const [onboardingMessage, setOnboardingMessage] = useState("");
@@ -153,6 +154,9 @@ export function App() {
     const { mode, ...nextData } = loadedData;
     setData(nextData);
     setDataMode(mode);
+    if (mode === "signed_out") {
+      setView("auth");
+    }
     setFilters((current) => ({
       ...current,
       cycleId: nextData.cycles.find((cycle) => cycle.isActive)?.id ?? nextData.cycles[0]?.id ?? current.cycleId,
@@ -357,7 +361,7 @@ export function App() {
             onGoogleAuth={handleGoogleAuth}
           />
         )}
-        {dataMode !== "needs_onboarding" && view === "dashboard" && (
+        {dataMode !== "needs_onboarding" && dataMode !== "signed_out" && view === "dashboard" && (
           <Dashboard
             objectives={objectives}
             keyResults={keyResults}
@@ -368,7 +372,7 @@ export function App() {
             onOpenObjective={openObjective}
           />
         )}
-        {dataMode !== "needs_onboarding" && view === "objectives" && (
+        {dataMode !== "needs_onboarding" && dataMode !== "signed_out" && view === "objectives" && (
           <ObjectivesView
             filters={filters}
             setFilters={setFilters}
@@ -380,7 +384,7 @@ export function App() {
             onOpenObjective={openObjective}
           />
         )}
-        {dataMode !== "needs_onboarding" && view === "detail" && selectedObjective && (
+        {dataMode !== "needs_onboarding" && dataMode !== "signed_out" && view === "detail" && selectedObjective && (
           <ObjectiveDetail
             objective={selectedObjective}
             keyResults={keyResults.filter((kr) => kr.objectiveId === selectedObjective.id)}
@@ -391,7 +395,7 @@ export function App() {
             onUpdateKr={setUpdateTarget}
           />
         )}
-        {dataMode !== "needs_onboarding" && view === "teams" && (
+        {dataMode !== "needs_onboarding" && dataMode !== "signed_out" && view === "teams" && (
           <TeamsView organization={organization} profiles={profiles} teams={teams} invites={invites} onInvite={sendInvite} />
         )}
       </section>
@@ -477,7 +481,7 @@ function Topbar({
   language: Language;
   onLanguageChange: (language: Language) => void;
   isLoading: boolean;
-  dataMode: "demo" | "supabase" | "needs_onboarding";
+  dataMode: DataMode;
   onSignOut: () => void;
 }) {
   return (
@@ -504,7 +508,7 @@ function Topbar({
               ? copy.connected
               : dataMode === "needs_onboarding"
                 ? copy.needsOnboarding
-                : isSupabaseConfigured
+                : dataMode === "signed_out" || isSupabaseConfigured
                   ? copy.awaitingLogin
                   : copy.demo}
         </Badge>

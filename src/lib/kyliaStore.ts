@@ -18,7 +18,7 @@ import { isSupabaseConfigured, supabase } from "./supabase";
 
 const today = "2026-04-27";
 
-type StoreMode = "demo" | "supabase" | "needs_onboarding";
+type StoreMode = "demo" | "signed_out" | "supabase" | "needs_onboarding";
 
 export type LoadedKyliaData = KyliaData & {
   mode: StoreMode;
@@ -63,7 +63,7 @@ export async function loadKyliaData(): Promise<LoadedKyliaData> {
 
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) {
-    return { ...cloneDemoData(), mode: "demo" };
+    return { ...cloneDemoData(), mode: "signed_out" };
   }
 
   const { data: currentProfile, error: profileError } = await supabase
