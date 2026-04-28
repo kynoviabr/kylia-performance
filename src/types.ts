@@ -116,6 +116,7 @@ export type KyliaData = {
 export type KrUpdateInput = {
   krId: string;
   updatedBy: string;
+  previousValue: number;
   newValue: number;
   progress: number;
   confidence: number;

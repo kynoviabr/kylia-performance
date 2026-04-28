@@ -139,6 +139,7 @@ export async function persistKrUpdate(input: KrUpdateInput) {
     .update({
       current_value: input.newValue,
       progress: input.progress,
+      status: statusFromStoredProgress(input.progress),
       confidence: input.confidence,
     })
     .eq("id", input.krId);
@@ -146,6 +147,7 @@ export async function persistKrUpdate(input: KrUpdateInput) {
   await supabase.from("kr_updates").insert({
     key_result_id: input.krId,
     updated_by: input.updatedBy,
+    previous_value: input.previousValue,
     new_value: input.newValue,
     progress: input.progress,
     confidence: input.confidence,

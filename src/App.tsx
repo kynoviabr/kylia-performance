@@ -353,7 +353,7 @@ export function App() {
               status,
               confidence: payload.confidence,
               hasBlocker: payload.hasBlocker,
-              lastUpdate: "2026-04-27",
+              lastUpdate: new Date().toISOString().slice(0, 10),
             }
           : kr,
       ),
@@ -369,7 +369,7 @@ export function App() {
           comment: payload.comment,
           hasBlocker: payload.hasBlocker,
           blockerDescription: payload.blockerDescription || undefined,
-          createdAt: "2026-04-27",
+          createdAt: new Date().toISOString().slice(0, 10),
         },
         ...current.updates,
       ],
@@ -402,6 +402,7 @@ export function App() {
     persistKrUpdate({
       krId: payload.krId,
       updatedBy: currentUser.id,
+      previousValue: target.currentValue,
       newValue: payload.newValue,
       progress,
       confidence: payload.confidence,
@@ -1509,7 +1510,7 @@ function KrUpdateModal({
       <form className="modal" onSubmit={handleSubmit}>
         <div className="modal-header">
           <div>
-            <span className="eyebrow">Update de KR</span>
+            <span className="eyebrow">Check-in semanal</span>
             <h2>{keyResult.title}</h2>
           </div>
           <button className="icon-button" type="button" onClick={onClose} aria-label="Fechar modal">
@@ -1517,7 +1518,7 @@ function KrUpdateModal({
           </button>
         </div>
         <label>
-          Novo valor
+          Valor atual
           <input value={newValue} onChange={(event) => setNewValue(event.target.value)} type="number" />
         </label>
         <label>
@@ -1526,7 +1527,7 @@ function KrUpdateModal({
         </label>
         <label>
           Comentário
-          <textarea value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Contexto da atualização" rows={4} />
+          <textarea value={comment} onChange={(event) => setComment(event.target.value)} placeholder="O que avançou, mudou ou precisa de atenção?" rows={4} />
         </label>
         <label className="checkbox-row">
           <input checked={hasBlocker} onChange={(event) => setHasBlocker(event.target.checked)} type="checkbox" />
@@ -1539,7 +1540,7 @@ function KrUpdateModal({
           </label>
         )}
         <button className="primary-button" type="submit">
-          <ArrowUpRight size={18} /> Registrar update
+          <ArrowUpRight size={18} /> Registrar check-in
         </button>
       </form>
     </div>
