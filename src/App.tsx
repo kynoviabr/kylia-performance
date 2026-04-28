@@ -1101,34 +1101,43 @@ function ObjectiveDetail({
       <section className="panel wide">
         <PanelHeader icon={Plus} title="Novo Key Result" action={<Badge tone="success">key_results</Badge>} />
         <form className="kr-form" onSubmit={handleSubmit}>
-          <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Ex: Aumentar receita recorrente para R$ 100 mil" required />
-          <textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Descrição ou critério de sucesso" rows={3} />
-          <select value={ownerId} onChange={(event) => setOwnerId(event.target.value)} required>
-            {profiles.map((profile) => (
-              <option key={profile.id} value={profile.id}>
-                {profile.fullName} · {roleLabels[profile.role]}
-              </option>
-            ))}
-          </select>
-          <select value={krType} onChange={(event) => handleTypeChange(event.target.value as KrType)}>
-            <option value="percentage">Percentual</option>
-            <option value="numeric">Número</option>
-            <option value="currency">Moeda</option>
-            <option value="boolean">Sim/não</option>
-          </select>
+          <label><span>Título</span><input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Ex: Lançar versão beta" required /></label>
+          <label><span>Descrição</span><textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Critério de sucesso" rows={3} /></label>
+          <label>
+            <span>Dono</span>
+            <select value={ownerId} onChange={(event) => setOwnerId(event.target.value)} required>
+              {profiles.map((profile) => (
+                <option key={profile.id} value={profile.id}>
+                  {profile.fullName} · {roleLabels[profile.role]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>Tipo</span>
+            <select value={krType} onChange={(event) => handleTypeChange(event.target.value as KrType)}>
+              <option value="percentage">Percentual</option>
+              <option value="numeric">Número</option>
+              <option value="currency">Moeda</option>
+              <option value="boolean">Sim/não</option>
+            </select>
+          </label>
           {krType !== "boolean" && (
             <>
-              <input value={unit} onChange={(event) => setUnit(event.target.value)} placeholder="Unidade: %, R$, clientes, NPS" />
-              <input value={startValue} onChange={(event) => setStartValue(Number(event.target.value))} type="number" placeholder="Valor inicial" />
-              <input value={currentValue} onChange={(event) => setCurrentValue(Number(event.target.value))} type="number" placeholder="Valor atual" />
-              <input value={targetValue} onChange={(event) => setTargetValue(Number(event.target.value))} type="number" placeholder="Meta" required />
+              <label><span>Unidade</span><input value={unit} onChange={(event) => setUnit(event.target.value)} placeholder="%, R$, clientes" /></label>
+              <label><span>Inicial</span><input value={startValue} onChange={(event) => setStartValue(Number(event.target.value))} type="number" /></label>
+              <label><span>Atual</span><input value={currentValue} onChange={(event) => setCurrentValue(Number(event.target.value))} type="number" /></label>
+              <label><span>Meta</span><input value={targetValue} onChange={(event) => setTargetValue(Number(event.target.value))} type="number" required /></label>
             </>
           )}
           {krType === "boolean" && (
-            <select value={currentValue > 0 ? "1" : "0"} onChange={(event) => setCurrentValue(Number(event.target.value))}>
-              <option value="0">Ainda não concluído</option>
-              <option value="1">Concluído</option>
-            </select>
+            <label>
+              <span>Status</span>
+              <select value={currentValue > 0 ? "1" : "0"} onChange={(event) => setCurrentValue(Number(event.target.value))}>
+                <option value="0">Ainda não concluído</option>
+                <option value="1">Concluído</option>
+              </select>
+            </label>
           )}
           <label className="range-field">
             <span>Confiança inicial: {confidence}/10</span>

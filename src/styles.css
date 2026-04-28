@@ -804,9 +804,22 @@ button {
 }
 
 .kr-form textarea,
+.kr-form label:first-child,
+.kr-form label:nth-child(2),
 .kr-form .auth-message,
 .kr-form .primary-button {
   grid-column: 1 / -1;
+}
+
+.kr-form label {
+  display: grid;
+  gap: 6px;
+  color: var(--text-md);
+}
+
+.kr-form label span {
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .range-field {
