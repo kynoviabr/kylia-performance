@@ -759,6 +759,32 @@ button {
   gap: 10px;
 }
 
+.objective-form {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.objective-form input,
+.objective-form textarea,
+.objective-form select {
+  min-height: 44px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text-hi);
+  padding: 0 12px;
+}
+
+.objective-form textarea {
+  grid-column: span 2;
+  padding-top: 10px;
+}
+
+.objective-form .auth-message {
+  grid-column: span 3;
+}
+
 .invite-row {
   display: flex;
   align-items: center;
@@ -983,6 +1009,7 @@ button {
 
   .metric-row,
   .toolbar,
+  .objective-form,
   .objective-main,
   .detail-header,
   .people-grid,

@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { demoData } from "./data";
-import { createInvite, createTeam, createWorkspace, loadKyliaData, persistKrUpdate } from "./lib/kyliaStore";
+import { createInvite, createObjective, createTeam, createWorkspace, loadKyliaData, persistKrUpdate } from "./lib/kyliaStore";
 import { isSupabaseConfigured, signInWithEmail, signInWithGoogle, signOut, signUpWithEmail, supabase } from "./lib/supabase";
 import type { Invite, KeyResult, KrUpdate, Objective, KyliaData, OnboardingInput, Organization, Profile, Role, Status, Team, WeeklyProgress } from "./types";
 
@@ -242,6 +242,34 @@ export function App() {
     return "";
   }
 
+  async function handleCreateObjective(input: {
+    cycleId: string;
+    teamId?: string;
+    parentId?: string;
+    title: string;
+    description: string;
+    ownerId: string;
+    isCompanyOkr: boolean;
+  }) {
+    const result = await createObjective({
+      organizationId: organization.id,
+      createdBy: currentUser.id,
+      ...input,
+    });
+
+    if (result.error || !result.data) {
+      return result.error?.message ?? "Could not create objective.";
+    }
+
+    setData((current) => ({
+      ...current,
+      objectives: [...current.objectives, result.data],
+    }));
+    setSelectedObjectiveId(result.data.id);
+
+    return "";
+  }
+
   const filteredObjectives = useMemo(() => {
     return objectives.filter((objective) => {
       const matchesCycle = objective.cycleId === filters.cycleId;
@@ -409,6 +437,7 @@ export function App() {
             cycles={cycles}
             teams={teams}
             profiles={profiles}
+            onCreateObjective={handleCreateObjective}
             onOpenObjective={openObjective}
           />
         )}
@@ -668,6 +697,7 @@ function ObjectivesView({
   cycles,
   teams,
   profiles,
+  onCreateObjective,
   onOpenObjective,
 }: {
   filters: Filters;
@@ -677,10 +707,98 @@ function ObjectivesView({
   cycles: KyliaData["cycles"];
   teams: Team[];
   profiles: Profile[];
+  onCreateObjective: (input: {
+    cycleId: string;
+    teamId?: string;
+    parentId?: string;
+    title: string;
+    description: string;
+    ownerId: string;
+    isCompanyOkr: boolean;
+  }) => Promise<string>;
   onOpenObjective: (objectiveId: string) => void;
 }) {
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [scope, setScope] = useState<"company" | "team">("company");
+  const [teamId, setTeamId] = useState(teams[0]?.id ?? "");
+  const [cycleId, setCycleId] = useState(cycles[0]?.id ?? "");
+  const [ownerId, setOwnerId] = useState(profiles[0]?.id ?? "");
+  const [parentId, setParentId] = useState("");
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    if (!cycleId && cycles[0]) setCycleId(cycles[0].id);
+    if (!teamId && teams[0]) setTeamId(teams[0].id);
+    if (!ownerId && profiles[0]) setOwnerId(profiles[0].id);
+  }, [cycleId, cycles, ownerId, profiles, teamId, teams]);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setMessage("");
+
+    const result = await onCreateObjective({
+      cycleId,
+      teamId: scope === "team" ? teamId : undefined,
+      parentId: parentId || undefined,
+      title: title.trim(),
+      description: description.trim(),
+      ownerId,
+      isCompanyOkr: scope === "company",
+    });
+
+    if (result) {
+      setMessage(result);
+      return;
+    }
+
+    setTitle("");
+    setDescription("");
+    setParentId("");
+    setMessage("Objetivo criado.");
+  }
+
   return (
     <div className="page-stack">
+      <section className="panel wide">
+        <PanelHeader icon={Plus} title="Novo objetivo" action={<Badge tone="success">objectives</Badge>} />
+        <form className="objective-form" onSubmit={handleSubmit}>
+          <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Título do objetivo" required />
+          <textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Descrição" rows={3} />
+          <select value={cycleId} onChange={(event) => setCycleId(event.target.value)} required>
+            {cycles.map((cycle) => (
+              <option key={cycle.id} value={cycle.id}>{cycle.name}</option>
+            ))}
+          </select>
+          <select value={ownerId} onChange={(event) => setOwnerId(event.target.value)} required>
+            {profiles.map((profile) => (
+              <option key={profile.id} value={profile.id}>{profile.fullName} · {roleLabels[profile.role]}</option>
+            ))}
+          </select>
+          <select value={scope} onChange={(event) => setScope(event.target.value as "company" | "team")}>
+            <option value="company">Empresa inteira</option>
+            <option value="team">Time/departamento</option>
+          </select>
+          {scope === "team" && (
+            <select value={teamId} onChange={(event) => setTeamId(event.target.value)} required>
+              {teams.map((team) => (
+                <option key={team.id} value={team.id}>{team.name}</option>
+              ))}
+            </select>
+          )}
+          <select value={parentId} onChange={(event) => setParentId(event.target.value)}>
+            <option value="">Sem objetivo pai</option>
+            {objectives.map((objective) => (
+              <option key={objective.id} value={objective.id}>{objective.title}</option>
+            ))}
+          </select>
+          {message && <p className="auth-message">{message}</p>}
+          <button className="primary-button" type="submit">
+            <Plus size={16} /> Criar objetivo
+          </button>
+        </form>
+      </section>
+
       <section className="toolbar">
         <label className="search-field">
           <Search size={18} />

@@ -146,3 +146,15 @@ export type CreateTeamInput = {
   color: string;
   ownerId: string;
 };
+
+export type CreateObjectiveInput = {
+  organizationId: string;
+  cycleId: string;
+  teamId?: string;
+  parentId?: string;
+  title: string;
+  description: string;
+  ownerId: string;
+  isCompanyOkr: boolean;
+  createdBy: string;
+};

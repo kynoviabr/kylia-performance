@@ -1,5 +1,6 @@
 import { demoData } from "../data";
 import type {
+  CreateObjectiveInput,
   CreateTeamInput,
   Cycle,
   Invite,
@@ -198,6 +199,36 @@ export async function createTeam(input: CreateTeamInput) {
   }
 
   return { data: mapTeam(data), error: null };
+}
+
+export async function createObjective(input: CreateObjectiveInput) {
+  if (!isSupabaseConfigured || !supabase) {
+    return { data: null, error: new Error("Supabase is not configured.") };
+  }
+
+  const { data, error } = await supabase
+    .from("objectives")
+    .insert({
+      organization_id: input.organizationId,
+      cycle_id: input.cycleId,
+      team_id: input.teamId ?? null,
+      parent_id: input.parentId ?? null,
+      title: input.title,
+      description: input.description,
+      owner_id: input.ownerId,
+      progress: 0,
+      status: "behind",
+      is_company_okr: input.isCompanyOkr,
+      created_by: input.createdBy,
+    })
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    return { data: null, error: error ?? new Error("Could not create objective.") };
+  }
+
+  return { data: mapObjective(data), error: null };
 }
 
 export async function createWorkspace(input: OnboardingInput) {
