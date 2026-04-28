@@ -653,6 +653,11 @@ button {
   padding: 0;
 }
 
+.detail-edit-button {
+  grid-column: 1 / -1;
+  width: fit-content;
+}
+
 .rotate-180 {
   transform: rotate(180deg);
 }

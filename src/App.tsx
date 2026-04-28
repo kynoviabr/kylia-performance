@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { demoData } from "./data";
-import { createInvite, createKeyResult, createObjective, createTeam, createWorkspace, loadKyliaData, persistKrUpdate, updateKeyResult } from "./lib/kyliaStore";
+import { createInvite, createKeyResult, createObjective, createTeam, createWorkspace, loadKyliaData, persistKrUpdate, updateKeyResult, updateObjective } from "./lib/kyliaStore";
 import { isSupabaseConfigured, signInWithEmail, signInWithGoogle, signOut, signUpWithEmail, supabase } from "./lib/supabase";
 import type { Invite, KeyResult, KrType, KrUpdate, Objective, KyliaData, OnboardingInput, Organization, Profile, Role, Status, Team, WeeklyProgress } from "./types";
 
@@ -129,6 +129,7 @@ export function App() {
   const [selectedObjectiveId, setSelectedObjectiveId] = useState("obj_company_growth");
   const [updateTarget, setUpdateTarget] = useState<KeyResult | null>(null);
   const [editKrTarget, setEditKrTarget] = useState<KeyResult | null>(null);
+  const [editObjectiveTarget, setEditObjectiveTarget] = useState<Objective | null>(null);
 
   const { organization, profiles, teams, cycles, objectives, keyResults, updates, invites, weeklyProgress } = data;
   const copy = productCopy[language];
@@ -269,6 +270,26 @@ export function App() {
     }));
     setSelectedObjectiveId(result.data.id);
 
+    return "";
+  }
+
+  async function handleUpdateObjective(input: {
+    id: string;
+    cycleId: string;
+    teamId?: string;
+    parentId?: string;
+    title: string;
+    description: string;
+    ownerId: string;
+    isCompanyOkr: boolean;
+  }) {
+    const result = await updateObjective(input);
+    if (result.error || !result.data) return result.error?.message ?? "Could not update objective.";
+    setData((current) => ({
+      ...current,
+      objectives: current.objectives.map((objective) => (objective.id === input.id ? result.data : objective)),
+    }));
+    setEditObjectiveTarget(null);
     return "";
   }
 
@@ -528,6 +549,7 @@ export function App() {
             teams={teams}
             profiles={profiles}
             onBack={() => setView("objectives")}
+            onEditObjective={setEditObjectiveTarget}
             onUpdateKr={setUpdateTarget}
             onEditKr={setEditKrTarget}
             onCreateKeyResult={handleCreateKeyResult}
@@ -557,6 +579,17 @@ export function App() {
           profiles={profiles}
           onClose={() => setEditKrTarget(null)}
           onSubmit={handleUpdateKeyResult}
+        />
+      )}
+      {editObjectiveTarget && (
+        <ObjectiveEditModal
+          objective={editObjectiveTarget}
+          objectives={objectives}
+          cycles={cycles}
+          teams={teams}
+          profiles={profiles}
+          onClose={() => setEditObjectiveTarget(null)}
+          onSubmit={handleUpdateObjective}
         />
       )}
     </main>
@@ -1034,6 +1067,7 @@ function ObjectiveDetail({
   teams,
   profiles,
   onBack,
+  onEditObjective,
   onUpdateKr,
   onEditKr,
   onCreateKeyResult,
@@ -1044,6 +1078,7 @@ function ObjectiveDetail({
   teams: Team[];
   profiles: Profile[];
   onBack: () => void;
+  onEditObjective: (objective: Objective) => void;
   onUpdateKr: (kr: KeyResult) => void;
   onEditKr: (kr: KeyResult) => void;
   onCreateKeyResult: (input: {
@@ -1140,6 +1175,9 @@ function ObjectiveDetail({
       <section className="detail-header">
         <button className="ghost-button" type="button" onClick={onBack}>
           <ChevronRight className="rotate-180" size={18} /> Objetivos
+        </button>
+        <button className="secondary-button compact detail-edit-button" type="button" onClick={() => onEditObjective(objective)}>
+          <Pencil size={16} /> Editar objetivo
         </button>
         <div className="detail-title">
           <Badge tone={objective.isCompanyOkr ? "success" : "neutral"}>{teamName(teams, objective.teamId)}</Badge>
@@ -1596,6 +1634,122 @@ function KrUpdateModal({
         )}
         <button className="primary-button" type="submit">
           <ArrowUpRight size={18} /> Registrar check-in
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function ObjectiveEditModal({
+  objective,
+  objectives,
+  cycles,
+  teams,
+  profiles,
+  onClose,
+  onSubmit,
+}: {
+  objective: Objective;
+  objectives: Objective[];
+  cycles: KyliaData["cycles"];
+  teams: Team[];
+  profiles: Profile[];
+  onClose: () => void;
+  onSubmit: (payload: {
+    id: string;
+    cycleId: string;
+    teamId?: string;
+    parentId?: string;
+    title: string;
+    description: string;
+    ownerId: string;
+    isCompanyOkr: boolean;
+  }) => Promise<string>;
+}) {
+  const corporateObjectives = objectives.filter((candidate) => candidate.isCompanyOkr && candidate.id !== objective.id);
+  const [title, setTitle] = useState(objective.title);
+  const [description, setDescription] = useState(objective.description);
+  const [cycleId, setCycleId] = useState(objective.cycleId);
+  const [scope, setScope] = useState<"company" | "team">(objective.isCompanyOkr ? "company" : "team");
+  const [teamId, setTeamId] = useState(objective.teamId ?? teams[0]?.id ?? "");
+  const [parentId, setParentId] = useState(objective.parentId ?? "");
+  const [ownerId, setOwnerId] = useState(objective.ownerId);
+  const [message, setMessage] = useState("");
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setMessage("");
+    if (scope === "team" && !parentId) {
+      setMessage("Escolha um objetivo corporativo pai.");
+      return;
+    }
+
+    const result = await onSubmit({
+      id: objective.id,
+      cycleId,
+      teamId: scope === "team" ? teamId : undefined,
+      parentId: scope === "team" ? parentId : undefined,
+      title: title.trim(),
+      description: description.trim(),
+      ownerId,
+      isCompanyOkr: scope === "company",
+    });
+    if (result) setMessage(result);
+  }
+
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <form className="modal" onSubmit={handleSubmit}>
+        <div className="modal-header">
+          <div>
+            <span className="eyebrow">Editar Objetivo</span>
+            <h2>{objective.title}</h2>
+          </div>
+          <button className="icon-button" type="button" onClick={onClose} aria-label="Fechar modal">
+            <X size={18} />
+          </button>
+        </div>
+        <label>Título<input value={title} onChange={(event) => setTitle(event.target.value)} required /></label>
+        <label>Descrição<textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={3} /></label>
+        <label>
+          Ciclo
+          <select value={cycleId} onChange={(event) => setCycleId(event.target.value)}>
+            {cycles.map((cycle) => <option key={cycle.id} value={cycle.id}>{cycle.name}</option>)}
+          </select>
+        </label>
+        <label>
+          Tipo
+          <select value={scope} onChange={(event) => setScope(event.target.value as "company" | "team")}>
+            <option value="company">Corporativo</option>
+            <option value="team">Departamental</option>
+          </select>
+        </label>
+        {scope === "team" && (
+          <>
+            <label>
+              Time/depto
+              <select value={teamId} onChange={(event) => setTeamId(event.target.value)} required>
+                {teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
+              </select>
+            </label>
+            <label>
+              Objetivo pai
+              <select value={parentId} onChange={(event) => setParentId(event.target.value)} required>
+                <option value="">Selecione</option>
+                {corporateObjectives.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.title}</option>)}
+              </select>
+            </label>
+          </>
+        )}
+        <label>
+          Dono
+          <select value={ownerId} onChange={(event) => setOwnerId(event.target.value)} required>
+            {profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.fullName} · {roleLabels[profile.role]}</option>)}
+          </select>
+        </label>
+        {message && <p className="auth-message">{message}</p>}
+        <button className="primary-button" type="submit">
+          <Pencil size={18} /> Salvar objetivo
         </button>
       </form>
     </div>

@@ -177,3 +177,7 @@ export type CreateObjectiveInput = {
   isCompanyOkr: boolean;
   createdBy: string;
 };
+
+export type UpdateObjectiveInput = Omit<CreateObjectiveInput, "organizationId" | "createdBy"> & {
+  id: string;
+};

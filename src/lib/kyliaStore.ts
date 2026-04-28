@@ -16,6 +16,7 @@ import type {
   Profile,
   Team,
   UpdateKeyResultInput,
+  UpdateObjectiveInput,
   WeeklyProgress,
 } from "../types";
 import { isSupabaseConfigured, supabase } from "./supabase";
@@ -239,6 +240,33 @@ export async function createObjective(input: CreateObjectiveInput) {
 
   if (error || !data) {
     return { data: null, error: error ?? new Error("Could not create objective.") };
+  }
+
+  return { data: mapObjective(data), error: null };
+}
+
+export async function updateObjective(input: UpdateObjectiveInput) {
+  if (!isSupabaseConfigured || !supabase) {
+    return { data: null, error: new Error("Supabase is not configured.") };
+  }
+
+  const { data, error } = await supabase
+    .from("objectives")
+    .update({
+      cycle_id: input.cycleId,
+      team_id: input.teamId ?? null,
+      parent_id: input.parentId ?? null,
+      title: input.title,
+      description: input.description,
+      owner_id: input.ownerId,
+      is_company_okr: input.isCompanyOkr,
+    })
+    .eq("id", input.id)
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    return { data: null, error: error ?? new Error("Could not update objective.") };
   }
 
   return { data: mapObjective(data), error: null };
