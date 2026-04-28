@@ -657,7 +657,10 @@ function Dashboard({
   const companyProgress = Math.round(
     objectives.length ? objectives.reduce((sum, objective) => sum + objective.progress, 0) / objectives.length : 0,
   );
-  const staleKrs = keyResults.filter((kr) => kr.status !== "on_track" || kr.hasBlocker);
+  const alerts = keyResults
+    .map((kr) => ({ kr, reason: krAlertReason(kr) }))
+    .filter((alert): alert is { kr: KeyResult; reason: string } => Boolean(alert.reason))
+    .slice(0, 8);
   const teamRows = teams.map((team) => {
     const teamObjectives = objectives.filter((objective) => objective.teamId === team.id);
     const progress = teamObjectives.length
@@ -681,7 +684,7 @@ function Dashboard({
 
       <div className="metric-row">
         <Metric icon={Flag} label="Objetivos ativos" value={String(objectives.length)} delta="+2 no ciclo" />
-        <Metric icon={KeyRound} label="Key Results" value={String(keyResults.length)} delta={`${staleKrs.length} em atenção`} />
+        <Metric icon={KeyRound} label="Key Results" value={String(keyResults.length)} delta={`${alerts.length} em atenção`} />
         <Metric icon={CircleGauge} label="Confiança média" value={`${average(keyResults.map((kr) => kr.confidence))}/10`} delta="base atual" />
       </div>
 
@@ -719,13 +722,14 @@ function Dashboard({
       <section className="panel">
         <PanelHeader icon={AlertTriangle} title="Alertas" action={<Badge tone="danger">vw_stale_krs</Badge>} />
         <div className="alert-list">
-          {staleKrs.map((kr) => (
+          {alerts.length === 0 && <div className="empty-state">Nenhum alerta ativo.</div>}
+          {alerts.map(({ kr, reason }) => (
             <button className="alert-item" key={kr.id} type="button" onClick={() => onOpenObjective(kr.objectiveId)}>
               <div>
                 <strong>{kr.title}</strong>
-                <span>{ownerName(profiles, kr.ownerId)} · {kr.lastUpdate}</span>
+                <span>{ownerName(profiles, kr.ownerId)} · {reason}</span>
               </div>
-              <Badge tone={kr.status === "behind" ? "danger" : "warning"}>{statusMeta[kr.status].label}</Badge>
+              <Badge tone={kr.hasBlocker || kr.status === "behind" ? "danger" : "warning"}>{statusMeta[kr.status].label}</Badge>
             </button>
           ))}
         </div>
@@ -1643,6 +1647,21 @@ function formatKrValue(value: number, unit: string, type: KeyResult["krType"]) {
   }
   if (unit === "%") return `${value}%`;
   return `${value}${unit ? ` ${unit}` : ""}`;
+}
+
+function krAlertReason(kr: KeyResult) {
+  if (kr.status === "completed") return "";
+  if (kr.hasBlocker) return "bloqueio reportado";
+  if (kr.status === "behind") return "atrasado";
+  if (kr.status === "at_risk") return "em risco";
+
+  const lastUpdate = new Date(kr.lastUpdate);
+  if (!Number.isNaN(lastUpdate.getTime())) {
+    const days = Math.floor((Date.now() - lastUpdate.getTime()) / 86400000);
+    if (days >= 7) return `${days} dias sem check-in`;
+  }
+
+  return "";
 }
 
 function slugify(value: string) {

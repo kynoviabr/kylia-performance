@@ -642,25 +642,6 @@ CREATE TRIGGER trg_on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
--- Trigger 4: Registra um kr_update automaticamente quando current_value muda
-CREATE OR REPLACE FUNCTION auto_log_kr_update()
-RETURNS TRIGGER AS $$
-BEGIN
-  IF OLD.current_value IS DISTINCT FROM NEW.current_value THEN
-    INSERT INTO public.kr_updates (
-      key_result_id, updated_by, previous_value, new_value, progress
-    ) VALUES (
-      NEW.id, auth.uid(), OLD.current_value, NEW.current_value, NEW.progress
-    );
-  END IF;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trg_auto_log_kr_update
-  AFTER UPDATE OF current_value ON key_results
-  FOR EACH ROW EXECUTE FUNCTION auto_log_kr_update();
-
 -- ============================================================
 -- VIEWS — Facilita queries do frontend
 -- ============================================================

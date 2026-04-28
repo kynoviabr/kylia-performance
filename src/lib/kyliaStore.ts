@@ -117,14 +117,23 @@ export async function loadKyliaData(): Promise<LoadedKyliaData> {
     mapProfile(profile, teamMembers, userData.user.email ?? ""),
   );
 
+  const updates = ((updatesResult.data ?? []) as any[]).map(mapKrUpdate);
+  const latestUpdateByKr = new Map<string, KrUpdate>();
+  updates.forEach((update) => {
+    if (!latestUpdateByKr.has(update.keyResultId)) latestUpdateByKr.set(update.keyResultId, update);
+  });
+
   return {
     organization: mapOrganization(organizationResult.data),
     profiles,
     teams: ((teamsResult.data ?? []) as any[]).map(mapTeam),
     cycles: ((cyclesResult.data ?? []) as any[]).map(mapCycle),
     objectives: ((objectivesResult.data ?? []) as any[]).map(mapObjective),
-    keyResults: ((keyResultsResult.data ?? []) as KeyResultRow[]).map(mapKeyResult),
-    updates: ((updatesResult.data ?? []) as any[]).map(mapKrUpdate),
+    keyResults: ((keyResultsResult.data ?? []) as KeyResultRow[]).map((row) => {
+      const keyResult = mapKeyResult(row);
+      return { ...keyResult, hasBlocker: latestUpdateByKr.get(keyResult.id)?.hasBlocker ?? false };
+    }),
+    updates,
     invites: ((invitesResult.data ?? []) as any[]).map(mapInvite),
     weeklyProgress: mapWeeklyProgress((weeklyResult.data ?? []) as any[]),
     mode: "supabase",
