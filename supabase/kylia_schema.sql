@@ -311,14 +311,14 @@ ALTER TABLE reports            ENABLE ROW LEVEL SECURITY;
 -- Função auxiliar: retorna o organization_id do usuário logado
 CREATE OR REPLACE FUNCTION current_user_org_id()
 RETURNS UUID AS $$
-  SELECT organization_id FROM profiles WHERE id = auth.uid();
-$$ LANGUAGE sql SECURITY DEFINER STABLE;
+  SELECT organization_id FROM public.profiles WHERE id = auth.uid();
+$$ LANGUAGE sql SECURITY DEFINER STABLE SET search_path = public;
 
 -- Função auxiliar: retorna o papel do usuário logado
 CREATE OR REPLACE FUNCTION current_user_role()
 RETURNS TEXT AS $$
-  SELECT role FROM profiles WHERE id = auth.uid();
-$$ LANGUAGE sql SECURITY DEFINER STABLE;
+  SELECT role FROM public.profiles WHERE id = auth.uid();
+$$ LANGUAGE sql SECURITY DEFINER STABLE SET search_path = public;
 
 -- ── POLICIES: organizations ──────────────────────────────────
 CREATE POLICY "Usuário vê apenas sua organização"
@@ -523,29 +523,34 @@ CREATE TRIGGER trg_kr_progress_changed
   FOR EACH ROW EXECUTE FUNCTION recalculate_objective_progress();
 
 -- Trigger 3: Cria perfil automaticamente quando novo usuário se registra
-CREATE OR REPLACE FUNCTION handle_new_user()
+CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO profiles (id, full_name, avatar_url)
+  INSERT INTO public.profiles (id, full_name, avatar_url)
   VALUES (
     NEW.id,
     NEW.raw_user_meta_data->>'full_name',
     NEW.raw_user_meta_data->>'avatar_url'
-  );
+  )
+  ON CONFLICT (id) DO UPDATE
+  SET
+    full_name = COALESCE(EXCLUDED.full_name, public.profiles.full_name),
+    avatar_url = COALESCE(EXCLUDED.avatar_url, public.profiles.avatar_url),
+    updated_at = NOW();
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 CREATE TRIGGER trg_on_auth_user_created
   AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE FUNCTION handle_new_user();
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
 -- Trigger 4: Registra um kr_update automaticamente quando current_value muda
 CREATE OR REPLACE FUNCTION auto_log_kr_update()
 RETURNS TRIGGER AS $$
 BEGIN
   IF OLD.current_value IS DISTINCT FROM NEW.current_value THEN
-    INSERT INTO kr_updates (
+    INSERT INTO public.kr_updates (
       key_result_id, updated_by, previous_value, new_value, progress
     ) VALUES (
       NEW.id, auth.uid(), OLD.current_value, NEW.current_value, NEW.progress
