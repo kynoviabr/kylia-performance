@@ -139,6 +139,10 @@ export type CreateKeyResultInput = {
   sortOrder: number;
 };
 
+export type UpdateKeyResultInput = Omit<CreateKeyResultInput, "objectiveId" | "sortOrder"> & {
+  id: string;
+};
+
 export type InviteInput = {
   organizationId: string;
   invitedBy: string;

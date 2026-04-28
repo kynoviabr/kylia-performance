@@ -490,6 +490,7 @@ button {
 .kr-form select,
 .auth-panel input,
 .modal input,
+.modal select,
 .modal textarea {
   min-height: 44px;
   border: 1px solid var(--border);
@@ -522,6 +523,7 @@ button {
 .kr-form select,
 .auth-panel input,
 .modal input,
+.modal select,
 .modal textarea {
   width: 100%;
   padding: 0 12px;
@@ -698,6 +700,12 @@ button {
 .kr-footer {
   justify-content: space-between;
   gap: 12px;
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .progress {

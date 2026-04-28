@@ -14,6 +14,7 @@ import {
   LockKeyhole,
   LogIn,
   MailPlus,
+  Pencil,
   Plus,
   Search,
   Settings,
@@ -25,7 +26,7 @@ import {
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { demoData } from "./data";
-import { createInvite, createKeyResult, createObjective, createTeam, createWorkspace, loadKyliaData, persistKrUpdate } from "./lib/kyliaStore";
+import { createInvite, createKeyResult, createObjective, createTeam, createWorkspace, loadKyliaData, persistKrUpdate, updateKeyResult } from "./lib/kyliaStore";
 import { isSupabaseConfigured, signInWithEmail, signInWithGoogle, signOut, signUpWithEmail, supabase } from "./lib/supabase";
 import type { Invite, KeyResult, KrType, KrUpdate, Objective, KyliaData, OnboardingInput, Organization, Profile, Role, Status, Team, WeeklyProgress } from "./types";
 
@@ -127,6 +128,7 @@ export function App() {
   });
   const [selectedObjectiveId, setSelectedObjectiveId] = useState("obj_company_growth");
   const [updateTarget, setUpdateTarget] = useState<KeyResult | null>(null);
+  const [editKrTarget, setEditKrTarget] = useState<KeyResult | null>(null);
 
   const { organization, profiles, teams, cycles, objectives, keyResults, updates, invites, weeklyProgress } = data;
   const copy = productCopy[language];
@@ -312,6 +314,39 @@ export function App() {
     return "";
   }
 
+  async function handleUpdateKeyResult(input: {
+    id: string;
+    title: string;
+    description: string;
+    ownerId: string;
+    krType: KrType;
+    startValue: number;
+    targetValue: number;
+    currentValue: number;
+    unit: string;
+    confidence: number;
+  }) {
+    const result = await updateKeyResult(input);
+    if (result.error || !result.data) return result.error?.message ?? "Could not update key result.";
+
+    const existing = keyResults.find((kr) => kr.id === input.id);
+    const objectiveId = existing?.objectiveId ?? result.data.objectiveId;
+    const nextObjectiveKrs = keyResults
+      .map((kr) => (kr.id === input.id ? { ...result.data, hasBlocker: kr.hasBlocker } : kr))
+      .filter((kr) => kr.objectiveId === objectiveId);
+    const objectiveProgress = average(nextObjectiveKrs.map((kr) => kr.progress));
+
+    setData((current) => ({
+      ...current,
+      keyResults: current.keyResults.map((kr) => (kr.id === input.id ? { ...result.data, hasBlocker: kr.hasBlocker } : kr)),
+      objectives: current.objectives.map((objective) =>
+        objective.id === objectiveId ? { ...objective, progress: objectiveProgress, status: statusFromProgress(objectiveProgress) } : objective,
+      ),
+    }));
+    setEditKrTarget(null);
+    return "";
+  }
+
   const filteredObjectives = useMemo(() => {
     return objectives.filter((objective) => {
       const matchesCycle = objective.cycleId === filters.cycleId;
@@ -494,6 +529,7 @@ export function App() {
             profiles={profiles}
             onBack={() => setView("objectives")}
             onUpdateKr={setUpdateTarget}
+            onEditKr={setEditKrTarget}
             onCreateKeyResult={handleCreateKeyResult}
           />
         )}
@@ -513,6 +549,14 @@ export function App() {
           keyResult={updateTarget}
           onClose={() => setUpdateTarget(null)}
           onSubmit={handleKrUpdate}
+        />
+      )}
+      {editKrTarget && (
+        <KrEditModal
+          keyResult={editKrTarget}
+          profiles={profiles}
+          onClose={() => setEditKrTarget(null)}
+          onSubmit={handleUpdateKeyResult}
         />
       )}
     </main>
@@ -991,6 +1035,7 @@ function ObjectiveDetail({
   profiles,
   onBack,
   onUpdateKr,
+  onEditKr,
   onCreateKeyResult,
 }: {
   objective: Objective;
@@ -1000,6 +1045,7 @@ function ObjectiveDetail({
   profiles: Profile[];
   onBack: () => void;
   onUpdateKr: (kr: KeyResult) => void;
+  onEditKr: (kr: KeyResult) => void;
   onCreateKeyResult: (input: {
     objectiveId: string;
     title: string;
@@ -1177,9 +1223,14 @@ function ObjectiveDetail({
             </div>
             <div className="kr-footer">
               <span>{ownerName(profiles, kr.ownerId)} · {kr.lastUpdate}</span>
-              <button className="primary-button compact" type="button" onClick={() => onUpdateKr(kr)}>
-                <ArrowUpRight size={16} /> Atualizar
-              </button>
+              <div className="button-row">
+                <button className="secondary-button compact" type="button" onClick={() => onEditKr(kr)}>
+                  <Pencil size={16} /> Editar
+                </button>
+                <button className="primary-button compact" type="button" onClick={() => onUpdateKr(kr)}>
+                  <ArrowUpRight size={16} /> Atualizar
+                </button>
+              </div>
             </div>
           </article>
         ))}
@@ -1545,6 +1596,120 @@ function KrUpdateModal({
         )}
         <button className="primary-button" type="submit">
           <ArrowUpRight size={18} /> Registrar check-in
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function KrEditModal({
+  keyResult,
+  profiles,
+  onClose,
+  onSubmit,
+}: {
+  keyResult: KeyResult;
+  profiles: Profile[];
+  onClose: () => void;
+  onSubmit: (payload: {
+    id: string;
+    title: string;
+    description: string;
+    ownerId: string;
+    krType: KrType;
+    startValue: number;
+    targetValue: number;
+    currentValue: number;
+    unit: string;
+    confidence: number;
+  }) => Promise<string>;
+}) {
+  const [title, setTitle] = useState(keyResult.title);
+  const [description, setDescription] = useState(keyResult.description);
+  const [ownerId, setOwnerId] = useState(keyResult.ownerId);
+  const [krType, setKrType] = useState<KrType>(keyResult.krType);
+  const [startValue, setStartValue] = useState(keyResult.startValue);
+  const [currentValue, setCurrentValue] = useState(keyResult.currentValue);
+  const [targetValue, setTargetValue] = useState(keyResult.targetValue);
+  const [unit, setUnit] = useState(keyResult.unit);
+  const [confidence, setConfidence] = useState(keyResult.confidence);
+  const [message, setMessage] = useState("");
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setMessage("");
+    if (krType !== "boolean" && targetValue === startValue) {
+      setMessage("A meta precisa ser diferente do valor inicial.");
+      return;
+    }
+
+    const result = await onSubmit({
+      id: keyResult.id,
+      title: title.trim(),
+      description: description.trim(),
+      ownerId,
+      krType,
+      startValue,
+      currentValue: krType === "boolean" ? (currentValue > 0 ? 1 : 0) : currentValue,
+      targetValue,
+      unit,
+      confidence,
+    });
+    if (result) setMessage(result);
+  }
+
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <form className="modal" onSubmit={handleSubmit}>
+        <div className="modal-header">
+          <div>
+            <span className="eyebrow">Editar Key Result</span>
+            <h2>{keyResult.title}</h2>
+          </div>
+          <button className="icon-button" type="button" onClick={onClose} aria-label="Fechar modal">
+            <X size={18} />
+          </button>
+        </div>
+        <label>Título<input value={title} onChange={(event) => setTitle(event.target.value)} required /></label>
+        <label>Descrição<textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={3} /></label>
+        <label>
+          Dono
+          <select value={ownerId} onChange={(event) => setOwnerId(event.target.value)} required>
+            {profiles.map((profile) => (
+              <option key={profile.id} value={profile.id}>{profile.fullName} · {roleLabels[profile.role]}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Tipo
+          <select value={krType} onChange={(event) => setKrType(event.target.value as KrType)}>
+            <option value="percentage">Percentual</option>
+            <option value="numeric">Número</option>
+            <option value="currency">Moeda</option>
+            <option value="boolean">Sim/não</option>
+          </select>
+        </label>
+        {krType !== "boolean" && (
+          <>
+            <label>Unidade<input value={unit} onChange={(event) => setUnit(event.target.value)} /></label>
+            <label>Inicial<input value={startValue} onChange={(event) => setStartValue(Number(event.target.value))} type="number" /></label>
+            <label>Atual<input value={currentValue} onChange={(event) => setCurrentValue(Number(event.target.value))} type="number" /></label>
+            <label>Meta<input value={targetValue} onChange={(event) => setTargetValue(Number(event.target.value))} type="number" required /></label>
+          </>
+        )}
+        {krType === "boolean" && (
+          <label>
+            Status
+            <select value={currentValue > 0 ? "1" : "0"} onChange={(event) => setCurrentValue(Number(event.target.value))}>
+              <option value="0">Ainda não concluído</option>
+              <option value="1">Concluído</option>
+            </select>
+          </label>
+        )}
+        <label>Confiança: {confidence}/10<input value={confidence} min="1" max="10" onChange={(event) => setConfidence(Number(event.target.value))} type="range" /></label>
+        {message && <p className="auth-message">{message}</p>}
+        <button className="primary-button" type="submit">
+          <Pencil size={18} /> Salvar edição
         </button>
       </form>
     </div>

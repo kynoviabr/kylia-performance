@@ -15,6 +15,7 @@ import type {
   Organization,
   Profile,
   Team,
+  UpdateKeyResultInput,
   WeeklyProgress,
 } from "../types";
 import { isSupabaseConfigured, supabase } from "./supabase";
@@ -272,6 +273,38 @@ export async function createKeyResult(input: CreateKeyResultInput) {
 
   if (error || !data) {
     return { data: null, error: error ?? new Error("Could not create key result.") };
+  }
+
+  return { data: mapKeyResult(data), error: null };
+}
+
+export async function updateKeyResult(input: UpdateKeyResultInput) {
+  if (!isSupabaseConfigured || !supabase) {
+    return { data: null, error: new Error("Supabase is not configured.") };
+  }
+
+  const progress = calculateStoredProgress(input.krType, input.startValue, input.targetValue, input.currentValue);
+  const { data, error } = await supabase
+    .from("key_results")
+    .update({
+      title: input.title,
+      description: input.description,
+      owner_id: input.ownerId,
+      kr_type: input.krType,
+      start_value: input.startValue,
+      target_value: input.targetValue,
+      current_value: input.currentValue,
+      unit: input.unit,
+      progress,
+      status: statusFromStoredProgress(progress),
+      confidence: input.confidence,
+    })
+    .eq("id", input.id)
+    .select("*")
+    .single<KeyResultRow>();
+
+  if (error || !data) {
+    return { data: null, error: error ?? new Error("Could not update key result.") };
   }
 
   return { data: mapKeyResult(data), error: null };
