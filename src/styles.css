@@ -483,6 +483,7 @@ button {
 .search-field,
 .toolbar select,
 .invite-form input,
+.invite-form textarea,
 .invite-form select,
 .auth-panel input,
 .modal input,
@@ -511,6 +512,7 @@ button {
 
 .toolbar select,
 .invite-form input,
+.invite-form textarea,
 .invite-form select,
 .auth-panel input,
 .modal input,
@@ -520,8 +522,22 @@ button {
 }
 
 .modal textarea,
-.auth-panel textarea {
+.auth-panel textarea,
+.invite-form textarea {
   padding-top: 10px;
+}
+
+.color-input {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 56px;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-md);
+}
+
+.color-input input {
+  min-height: 44px;
+  padding: 4px;
 }
 
 .objective-card {

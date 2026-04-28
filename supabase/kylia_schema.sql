@@ -423,6 +423,15 @@ CREATE POLICY "Usuário vê membros dos times da sua organização"
     )
   );
 
+CREATE POLICY "Admin e team_lead podem adicionar membros em times"
+  ON team_members FOR INSERT
+  WITH CHECK (
+    team_id IN (
+      SELECT id FROM public.teams WHERE organization_id = current_user_org_id()
+    )
+    AND current_user_role() IN ('admin', 'team_lead')
+  );
+
 CREATE POLICY "Admin e team_lead podem criar times"
   ON teams FOR INSERT
   WITH CHECK (

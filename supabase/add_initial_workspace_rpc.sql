@@ -73,6 +73,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 GRANT EXECUTE ON FUNCTION public.create_initial_workspace(TEXT, TEXT, TEXT, TEXT, TEXT) TO authenticated;
 
 DROP POLICY IF EXISTS "Usuário vê membros dos times da sua organização" ON public.team_members;
+DROP POLICY IF EXISTS "Admin e team_lead podem adicionar membros em times" ON public.team_members;
 
 CREATE POLICY "Usuário vê membros dos times da sua organização"
   ON public.team_members FOR SELECT
@@ -80,4 +81,13 @@ CREATE POLICY "Usuário vê membros dos times da sua organização"
     team_id IN (
       SELECT id FROM public.teams WHERE organization_id = public.current_user_org_id()
     )
+  );
+
+CREATE POLICY "Admin e team_lead podem adicionar membros em times"
+  ON public.team_members FOR INSERT
+  WITH CHECK (
+    team_id IN (
+      SELECT id FROM public.teams WHERE organization_id = public.current_user_org_id()
+    )
+    AND public.current_user_role() IN ('admin', 'team_lead')
   );

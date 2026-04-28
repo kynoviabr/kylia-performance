@@ -1,5 +1,6 @@
 import { demoData } from "../data";
 import type {
+  CreateTeamInput,
   Cycle,
   Invite,
   InviteInput,
@@ -161,6 +162,42 @@ export async function createInvite(input: InviteInput) {
     email: input.email,
     role: input.role,
   });
+}
+
+export async function createTeam(input: CreateTeamInput) {
+  if (!isSupabaseConfigured || !supabase) {
+    return { data: null, error: new Error("Supabase is not configured.") };
+  }
+
+  const { data, error } = await supabase
+    .from("teams")
+    .insert({
+      organization_id: input.organizationId,
+      name: input.name,
+      description: input.description,
+      color: input.color,
+      lead_id: input.ownerId,
+      is_active: true,
+    })
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    return { data: null, error: error ?? new Error("Could not create team.") };
+  }
+
+  const { error: membershipError } = await supabase
+    .from("team_members")
+    .insert({
+      team_id: data.id,
+      profile_id: input.ownerId,
+    });
+
+  if (membershipError) {
+    return { data: null, error: membershipError };
+  }
+
+  return { data: mapTeam(data), error: null };
 }
 
 export async function createWorkspace(input: OnboardingInput) {

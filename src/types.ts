@@ -138,3 +138,11 @@ export type OnboardingInput = {
   teamName: string;
   teamDescription: string;
 };
+
+export type CreateTeamInput = {
+  organizationId: string;
+  name: string;
+  description: string;
+  color: string;
+  ownerId: string;
+};

@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { demoData } from "./data";
-import { createInvite, createWorkspace, loadKyliaData, persistKrUpdate } from "./lib/kyliaStore";
+import { createInvite, createTeam, createWorkspace, loadKyliaData, persistKrUpdate } from "./lib/kyliaStore";
 import { isSupabaseConfigured, signInWithEmail, signInWithGoogle, signOut, signUpWithEmail, supabase } from "./lib/supabase";
 import type { Invite, KeyResult, KrUpdate, Objective, KyliaData, OnboardingInput, Organization, Profile, Role, Status, Team, WeeklyProgress } from "./types";
 
@@ -214,6 +214,34 @@ export function App() {
     setView("dashboard");
   }
 
+  async function handleCreateTeam(input: {
+    name: string;
+    description: string;
+    color: string;
+    ownerId: string;
+  }) {
+    const result = await createTeam({
+      organizationId: organization.id,
+      ...input,
+    });
+
+    if (result.error || !result.data) {
+      return result.error?.message ?? "Could not create team.";
+    }
+
+    setData((current) => ({
+      ...current,
+      teams: [...current.teams, result.data],
+      profiles: current.profiles.map((profile) =>
+        profile.id === input.ownerId && !profile.teamIds.includes(result.data.id)
+          ? { ...profile, teamIds: [...profile.teamIds, result.data.id] }
+          : profile,
+      ),
+    }));
+
+    return "";
+  }
+
   const filteredObjectives = useMemo(() => {
     return objectives.filter((objective) => {
       const matchesCycle = objective.cycleId === filters.cycleId;
@@ -396,7 +424,14 @@ export function App() {
           />
         )}
         {dataMode !== "needs_onboarding" && dataMode !== "signed_out" && view === "teams" && (
-          <TeamsView organization={organization} profiles={profiles} teams={teams} invites={invites} onInvite={sendInvite} />
+          <TeamsView
+            organization={organization}
+            profiles={profiles}
+            teams={teams}
+            invites={invites}
+            onInvite={sendInvite}
+            onCreateTeam={handleCreateTeam}
+          />
         )}
       </section>
       {updateTarget && (
@@ -789,21 +824,53 @@ function TeamsView({
   teams,
   invites,
   onInvite,
+  onCreateTeam,
 }: {
   organization: Organization;
   profiles: Profile[];
   teams: Team[];
   invites: Invite[];
   onInvite: (email: string, role: Role) => void;
+  onCreateTeam: (input: { name: string; description: string; color: string; ownerId: string }) => Promise<string>;
 }) {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Role>("member");
+  const [teamName, setTeamName] = useState("");
+  const [teamDescription, setTeamDescription] = useState("");
+  const [teamColor, setTeamColor] = useState("#7EBF8E");
+  const [ownerId, setOwnerId] = useState(profiles[0]?.id ?? "");
+  const [teamMessage, setTeamMessage] = useState("");
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!email.trim()) return;
     onInvite(email.trim(), role);
     setEmail("");
+  }
+
+  async function handleTeamSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setTeamMessage("");
+
+    if (!teamName.trim() || !ownerId) return;
+
+    const message = await onCreateTeam({
+      name: teamName.trim(),
+      description: teamDescription.trim(),
+      color: teamColor,
+      ownerId,
+    });
+
+    if (message) {
+      setTeamMessage(message);
+      return;
+    }
+
+    setTeamName("");
+    setTeamDescription("");
+    setTeamColor("#7EBF8E");
+    setOwnerId(profiles[0]?.id ?? "");
+    setTeamMessage("Time/departamento criado.");
   }
 
   return (
@@ -816,6 +883,7 @@ function TeamsView({
               <span className="team-dot large" style={{ backgroundColor: team.color }} />
               <h3>{team.name}</h3>
               <p>{team.description}</p>
+              <Badge tone="neutral">Owner: {ownerName(profiles, team.leadId)}</Badge>
               <div className="member-list">
                 {profiles.filter((profile) => profile.teamIds.includes(team.id)).map((profile) => (
                   <span key={profile.id}>{profile.fullName} · {roleLabels[profile.role]}</span>
@@ -824,6 +892,29 @@ function TeamsView({
             </article>
           ))}
         </div>
+      </section>
+
+      <section className="panel">
+        <PanelHeader icon={Plus} title="Novo time/depto" action={<Badge tone="success">teams</Badge>} />
+        <form className="invite-form" onSubmit={handleTeamSubmit}>
+          <input value={teamName} onChange={(event) => setTeamName(event.target.value)} placeholder="Ex: Marketing" required />
+          <textarea value={teamDescription} onChange={(event) => setTeamDescription(event.target.value)} placeholder="Descrição do time/departamento" rows={3} />
+          <label className="color-input">
+            <span>Cor</span>
+            <input value={teamColor} onChange={(event) => setTeamColor(event.target.value)} type="color" />
+          </label>
+          <select value={ownerId} onChange={(event) => setOwnerId(event.target.value)} required>
+            {profiles.map((profile) => (
+              <option key={profile.id} value={profile.id}>
+                {profile.fullName} · {roleLabels[profile.role]}
+              </option>
+            ))}
+          </select>
+          {teamMessage && <p className="auth-message">{teamMessage}</p>}
+          <button className="primary-button" type="submit">
+            <Plus size={16} /> Criar time/depto
+          </button>
+        </form>
       </section>
 
       <section className="panel">
