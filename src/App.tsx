@@ -26,7 +26,7 @@ import {
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { demoData } from "./data";
 import { createInvite, createWorkspace, loadKyliaData, persistKrUpdate } from "./lib/kyliaStore";
-import { isSupabaseConfigured, signInWithEmail, signInWithGoogle, signOut, signUpWithEmail } from "./lib/supabase";
+import { isSupabaseConfigured, signInWithEmail, signInWithGoogle, signOut, signUpWithEmail, supabase } from "./lib/supabase";
 import type { Invite, KeyResult, KrUpdate, Objective, KyliaData, OnboardingInput, Organization, Profile, Role, Status, Team, WeeklyProgress } from "./types";
 
 type View = "auth" | "dashboard" | "objectives" | "detail" | "teams";
@@ -135,6 +135,16 @@ export function App() {
 
   useEffect(() => {
     refreshData();
+
+    if (!isSupabaseConfigured) return;
+
+    const authSubscription = supabase?.auth.onAuthStateChange(() => {
+      refreshData();
+    });
+
+    return () => {
+      authSubscription?.data.subscription.unsubscribe();
+    };
   }, []);
 
   async function refreshData() {
@@ -162,7 +172,14 @@ export function App() {
       return;
     }
 
-    setAuthMessage(input.mode === "login" ? "Sessão iniciada." : "Cadastro criado. Verifique o e-mail se a confirmação estiver ativa.");
+    if (!result.data.session) {
+      setAuthMessage("Conta criada. Confirme seu e-mail e depois volte para fazer login.");
+      setView("auth");
+      await refreshData();
+      return;
+    }
+
+    setAuthMessage(input.mode === "login" ? "Sessão iniciada." : "Cadastro criado e sessão iniciada.");
     await refreshData();
     setView("dashboard");
   }
