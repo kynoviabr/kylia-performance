@@ -130,3 +130,11 @@ export type InviteInput = {
   email: string;
   role: Role;
 };
+
+export type OnboardingInput = {
+  organizationName: string;
+  organizationSlug: string;
+  sector: string;
+  teamName: string;
+  teamDescription: string;
+};

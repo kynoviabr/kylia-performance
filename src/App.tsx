@@ -25,9 +25,9 @@ import {
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { demoData } from "./data";
-import { createInvite, loadKyliaData, persistKrUpdate } from "./lib/kyliaStore";
+import { createInvite, createWorkspace, loadKyliaData, persistKrUpdate } from "./lib/kyliaStore";
 import { isSupabaseConfigured, signInWithEmail, signInWithGoogle, signOut, signUpWithEmail } from "./lib/supabase";
-import type { Invite, KeyResult, KrUpdate, Objective, KyliaData, Organization, Profile, Role, Status, Team, WeeklyProgress } from "./types";
+import type { Invite, KeyResult, KrUpdate, Objective, KyliaData, OnboardingInput, Organization, Profile, Role, Status, Team, WeeklyProgress } from "./types";
 
 type View = "auth" | "dashboard" | "objectives" | "detail" | "teams";
 type Language = "pt" | "en";
@@ -61,6 +61,7 @@ const productCopy: Record<Language, {
   loading: string;
   connected: string;
   awaitingLogin: string;
+  needsOnboarding: string;
   demo: string;
   ceoDashboard: string;
   hero: string;
@@ -81,6 +82,7 @@ const productCopy: Record<Language, {
     loading: "Carregando",
     connected: "Supabase conectado",
     awaitingLogin: "Aguardando login",
+    needsOnboarding: "Configurar workspace",
     demo: "Modo demo",
     ceoDashboard: "Dashboard executivo",
     hero: "Foco, performance e bloqueios em uma única rotina assistida por IA.",
@@ -101,6 +103,7 @@ const productCopy: Record<Language, {
     loading: "Loading",
     connected: "Supabase connected",
     awaitingLogin: "Awaiting login",
+    needsOnboarding: "Set up workspace",
     demo: "Demo mode",
     ceoDashboard: "Executive Dashboard",
     hero: "Focus, performance, and blockers in one AI-powered operating rhythm.",
@@ -111,9 +114,10 @@ export function App() {
   const [view, setView] = useState<View>("dashboard");
   const [language, setLanguage] = useState<Language>("pt");
   const [data, setData] = useState<KyliaData>(demoData);
-  const [dataMode, setDataMode] = useState<"demo" | "supabase">("demo");
+  const [dataMode, setDataMode] = useState<"demo" | "supabase" | "needs_onboarding">("demo");
   const [isLoading, setIsLoading] = useState(true);
   const [authMessage, setAuthMessage] = useState("");
+  const [onboardingMessage, setOnboardingMessage] = useState("");
   const [filters, setFilters] = useState<Filters>({
     cycleId: "q2_2026",
     teamId: "all",
@@ -174,6 +178,19 @@ export function App() {
     await signOut();
     await refreshData();
     setView("auth");
+  }
+
+  async function handleOnboarding(input: OnboardingInput) {
+    setOnboardingMessage("");
+    const result = await createWorkspace(input);
+
+    if (result.error) {
+      setOnboardingMessage(result.error.message);
+      return;
+    }
+
+    await refreshData();
+    setView("dashboard");
   }
 
   const filteredObjectives = useMemo(() => {
@@ -305,7 +322,7 @@ export function App() {
       <section className="workspace">
         <Topbar
           currentUserName={currentUser.fullName}
-          activeCycleName={activeCycle.name}
+          activeCycleName={activeCycle?.name ?? "No cycle"}
           copy={copy}
           language={language}
           onLanguageChange={setLanguage}
@@ -313,14 +330,17 @@ export function App() {
           dataMode={dataMode}
           onSignOut={handleSignOut}
         />
-        {view === "auth" && (
+        {dataMode === "needs_onboarding" && (
+          <OnboardingExperience message={onboardingMessage} onCreateWorkspace={handleOnboarding} />
+        )}
+        {dataMode !== "needs_onboarding" && view === "auth" && (
           <AuthExperience
             message={authMessage}
             onEmailAuth={handleEmailAuth}
             onGoogleAuth={handleGoogleAuth}
           />
         )}
-        {view === "dashboard" && (
+        {dataMode !== "needs_onboarding" && view === "dashboard" && (
           <Dashboard
             objectives={objectives}
             keyResults={keyResults}
@@ -331,7 +351,7 @@ export function App() {
             onOpenObjective={openObjective}
           />
         )}
-        {view === "objectives" && (
+        {dataMode !== "needs_onboarding" && view === "objectives" && (
           <ObjectivesView
             filters={filters}
             setFilters={setFilters}
@@ -343,7 +363,7 @@ export function App() {
             onOpenObjective={openObjective}
           />
         )}
-        {view === "detail" && (
+        {dataMode !== "needs_onboarding" && view === "detail" && selectedObjective && (
           <ObjectiveDetail
             objective={selectedObjective}
             keyResults={keyResults.filter((kr) => kr.objectiveId === selectedObjective.id)}
@@ -354,7 +374,7 @@ export function App() {
             onUpdateKr={setUpdateTarget}
           />
         )}
-        {view === "teams" && (
+        {dataMode !== "needs_onboarding" && view === "teams" && (
           <TeamsView organization={organization} profiles={profiles} teams={teams} invites={invites} onInvite={sendInvite} />
         )}
       </section>
@@ -440,7 +460,7 @@ function Topbar({
   language: Language;
   onLanguageChange: (language: Language) => void;
   isLoading: boolean;
-  dataMode: "demo" | "supabase";
+  dataMode: "demo" | "supabase" | "needs_onboarding";
   onSignOut: () => void;
 }) {
   return (
@@ -461,7 +481,15 @@ function Topbar({
         </div>
         <Badge tone="neutral">{activeCycleName}</Badge>
         <Badge tone={dataMode === "supabase" ? "success" : "warning"}>
-          {isLoading ? copy.loading : dataMode === "supabase" ? copy.connected : isSupabaseConfigured ? copy.awaitingLogin : copy.demo}
+          {isLoading
+            ? copy.loading
+            : dataMode === "supabase"
+              ? copy.connected
+              : dataMode === "needs_onboarding"
+                ? copy.needsOnboarding
+                : isSupabaseConfigured
+                  ? copy.awaitingLogin
+                  : copy.demo}
         </Badge>
         <button className="icon-button" type="button" aria-label="Notificações">
           <Bell size={18} />
@@ -497,7 +525,7 @@ function Dashboard({
   onOpenObjective: (objectiveId: string) => void;
 }) {
   const companyProgress = Math.round(
-    objectives.reduce((sum, objective) => sum + objective.progress, 0) / objectives.length,
+    objectives.length ? objectives.reduce((sum, objective) => sum + objective.progress, 0) / objectives.length : 0,
   );
   const staleKrs = keyResults.filter((kr) => kr.status !== "on_track" || kr.hasBlocker);
   const teamRows = teams.map((team) => {
@@ -877,6 +905,76 @@ function AuthExperience({
   );
 }
 
+function OnboardingExperience({
+  message,
+  onCreateWorkspace,
+}: {
+  message: string;
+  onCreateWorkspace: (input: OnboardingInput) => void;
+}) {
+  const [organizationName, setOrganizationName] = useState("Kynovia");
+  const [organizationSlug, setOrganizationSlug] = useState("kynovia");
+  const [sector, setSector] = useState("AI products and business performance");
+  const [teamName, setTeamName] = useState("Leadership");
+  const [teamDescription, setTeamDescription] = useState("Executive goals, strategy, and operating cadence");
+
+  function handleOrganizationName(value: string) {
+    setOrganizationName(value);
+    setOrganizationSlug(slugify(value));
+  }
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    onCreateWorkspace({
+      organizationName,
+      organizationSlug,
+      sector,
+      teamName,
+      teamDescription,
+    });
+  }
+
+  return (
+    <div className="auth-layout">
+      <section className="auth-copy">
+        <span className="eyebrow">Workspace setup</span>
+        <h2>Create your first Kylia workspace and start with a clean performance system.</h2>
+        <div className="auth-steps">
+          <span><CheckCircle2 size={18} /> Organization</span>
+          <span><CheckCircle2 size={18} /> First team</span>
+          <span><CheckCircle2 size={18} /> First cycle</span>
+        </div>
+      </section>
+      <form className="auth-panel" onSubmit={handleSubmit}>
+        <label>
+          Organization
+          <input value={organizationName} onChange={(event) => handleOrganizationName(event.target.value)} required />
+        </label>
+        <label>
+          Workspace slug
+          <input value={organizationSlug} onChange={(event) => setOrganizationSlug(slugify(event.target.value))} required />
+        </label>
+        <label>
+          Sector
+          <input value={sector} onChange={(event) => setSector(event.target.value)} />
+        </label>
+        <label>
+          First team
+          <input value={teamName} onChange={(event) => setTeamName(event.target.value)} required />
+        </label>
+        <label>
+          Team description
+          <textarea value={teamDescription} onChange={(event) => setTeamDescription(event.target.value)} rows={3} />
+        </label>
+        {message && <p className="auth-message">{message}</p>}
+        <button className="primary-button" type="submit">
+          <Plus size={18} /> Create workspace
+        </button>
+      </form>
+    </div>
+  );
+}
+
 function KrUpdateModal({
   keyResult,
   onClose,
@@ -1027,6 +1125,7 @@ function statusFromProgress(progress: number): Status {
 }
 
 function average(values: number[]) {
+  if (!values.length) return 0;
   return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length);
 }
 
@@ -1048,4 +1147,14 @@ function formatKrValue(value: number, unit: string, type: KeyResult["krType"]) {
   }
   if (unit === "%") return `${value}%`;
   return `${value}${unit ? ` ${unit}` : ""}`;
+}
+
+function slugify(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
 }

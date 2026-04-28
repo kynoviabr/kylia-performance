@@ -8,6 +8,7 @@ import type {
   KrUpdateInput,
   Objective,
   KyliaData,
+  OnboardingInput,
   Organization,
   Profile,
   Team,
@@ -17,7 +18,7 @@ import { isSupabaseConfigured, supabase } from "./supabase";
 
 const today = "2026-04-27";
 
-type StoreMode = "demo" | "supabase";
+type StoreMode = "demo" | "supabase" | "needs_onboarding";
 
 export type LoadedKyliaData = KyliaData & {
   mode: StoreMode;
@@ -72,7 +73,11 @@ export async function loadKyliaData(): Promise<LoadedKyliaData> {
     .single<ProfileRow>();
 
   if (profileError || !currentProfile?.organization_id) {
-    return { ...cloneDemoData(), mode: "demo" };
+    return {
+      ...cloneDemoData(),
+      profiles: [mapProfile(currentProfile ?? fallbackProfile(userData.user.id), [], userData.user.email ?? "")],
+      mode: "needs_onboarding",
+    };
   }
 
   const organizationId = currentProfile.organization_id;
@@ -158,6 +163,27 @@ export async function createInvite(input: InviteInput) {
   });
 }
 
+export async function createWorkspace(input: OnboardingInput) {
+  if (!isSupabaseConfigured || !supabase) {
+    return { error: new Error("Supabase is not configured.") };
+  }
+
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError || !userData.user) {
+    return { error: userError ?? new Error("No authenticated user.") };
+  }
+
+  const { error } = await supabase.rpc("create_initial_workspace", {
+    org_name: input.organizationName,
+    org_slug: input.organizationSlug,
+    org_sector: input.sector || "Business performance",
+    first_team_name: input.teamName,
+    first_team_description: input.teamDescription,
+  });
+
+  return { error };
+}
+
 function cloneDemoData(): KyliaData {
   return structuredClone(demoData);
 }
@@ -182,6 +208,17 @@ function mapProfile(row: ProfileRow, teamMembers: TeamMemberRow[], fallbackEmail
     role: row.role,
     teamIds: teamMembers.filter((member) => member.profile_id === row.id).map((member) => member.team_id),
     avatarUrl: row.avatar_url ?? undefined,
+  };
+}
+
+function fallbackProfile(id: string): ProfileRow {
+  return {
+    id,
+    organization_id: null,
+    full_name: "Usuario",
+    avatar_url: null,
+    job_title: null,
+    role: "admin",
   };
 }
 
