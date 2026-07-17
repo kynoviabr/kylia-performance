@@ -33,6 +33,11 @@ import type { Invite, KeyResult, KrType, KrUpdate, Objective, KyliaData, Onboard
 type View = "auth" | "dashboard" | "objectives" | "detail" | "teams";
 type Language = "pt" | "en";
 type DataMode = "demo" | "signed_out" | "supabase" | "needs_onboarding";
+const demoCredentials = {
+  email: "demo@kylia.app",
+  password: "demo123",
+};
+
 type Filters = {
   cycleId: string;
   teamId: string;
@@ -170,6 +175,16 @@ export function App() {
 
   async function handleEmailAuth(input: { mode: "login" | "signup"; email: string; password: string; fullName: string }) {
     setAuthMessage("");
+
+    if (
+      input.mode === "login" &&
+      input.email.trim().toLowerCase() === demoCredentials.email &&
+      input.password === demoCredentials.password
+    ) {
+      handleDemoAccess();
+      return;
+    }
+
     const result = input.mode === "login"
       ? await signInWithEmail(input.email, input.password)
       : await signUpWithEmail(input.email, input.password, input.fullName);
@@ -188,6 +203,19 @@ export function App() {
 
     setAuthMessage(input.mode === "login" ? "Sessão iniciada." : "Cadastro criado e sessão iniciada.");
     await refreshData();
+    setView("dashboard");
+  }
+
+  function handleDemoAccess() {
+    const nextData = structuredClone(demoData);
+    setData(nextData);
+    setDataMode("demo");
+    setSelectedObjectiveId(nextData.objectives[0]?.id ?? selectedObjectiveId);
+    setFilters((current) => ({
+      ...current,
+      cycleId: nextData.cycles.find((cycle) => cycle.isActive)?.id ?? nextData.cycles[0]?.id ?? current.cycleId,
+    }));
+    setAuthMessage("Modo demo iniciado.");
     setView("dashboard");
   }
 
@@ -514,6 +542,7 @@ export function App() {
             message={authMessage}
             onEmailAuth={handleEmailAuth}
             onGoogleAuth={handleGoogleAuth}
+            onDemoAccess={handleDemoAccess}
           />
         )}
         {dataMode !== "needs_onboarding" && dataMode !== "signed_out" && view === "dashboard" && (
@@ -1437,10 +1466,12 @@ function AuthExperience({
   message,
   onEmailAuth,
   onGoogleAuth,
+  onDemoAccess,
 }: {
   message: string;
   onEmailAuth: (input: { mode: "login" | "signup"; email: string; password: string; fullName: string }) => void;
   onGoogleAuth: () => void;
+  onDemoAccess: () => void;
 }) {
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [fullName, setFullName] = useState("");
@@ -1489,6 +1520,10 @@ function AuthExperience({
         <button className="secondary-button" type="button" onClick={onGoogleAuth}>
           <Sparkles size={18} /> Continuar com Google
         </button>
+        <button className="secondary-button" type="button" onClick={onDemoAccess}>
+          <LayoutDashboard size={18} /> Entrar em modo demo
+        </button>
+        <p className="auth-message">Demo: {demoCredentials.email} / {demoCredentials.password}</p>
       </form>
     </div>
   );
